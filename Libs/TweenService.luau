@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- TweenService — v1.0.0
+-- TweenService — v1.0.1
 -- Position animation library for Matcha LuaVM.
 -- Animates BasePart instances by interpolating their Position
 -- property using multiple easing styles and directions.
@@ -16,59 +16,28 @@
     EASING DIRECTIONS (config.direction : string)
         "In" | "Out" | "InOut"
 
-    ──────────────────────────────────────────────────────────
-    TweenService.new(instance: BasePart, config: table) → Tween
-    ──────────────────────────────────────────────────────────
-        instance    : BasePart  — The instance whose Position will be animated.
-        config      : table     — Configuration table with the following fields:
+    TweenService.new(instance: BasePart, config: table) -> Tween
+        instance      : BasePart  - The instance whose Position will be animated.
+        config        : table     - Configuration table with the following fields:
+            position      : Vector3   - Target position. Default: instance.Position.
+            duration      : number    - Duration in seconds (ignored if speed is set). Default: 1.
+            speed         : number    - Speed in studs/second. Overrides duration if > 0.
+            style         : string    - Easing style name. Default: "Sine".
+            direction     : string    - Easing direction. Default: "Out".
+            repeat_       : number    - Number of additional repetitions. -1 = infinite. Default: 0.
+            reverse       : boolean   - If true, even cycles play in reverse. Default: false.
+            delay         : number    - Initial delay in seconds before playback starts. Default: 0.
+            freezePhysics : boolean   - Forces Velocity to zero during animation. Default: true when position is defined.
+            onComplete    : function  - Callback invoked when the tween finishes. No arguments.
+            onUpdate      : function  - Callback invoked every frame. Receives (easedValue: number).
 
-            position      : Vector3   — Target position. Default: instance.Position.
-            duration      : number    — Duration in seconds (ignored if speed is set). Default: 1.
-            speed         : number    — Speed in studs/second. Overrides duration if > 0.
-            style         : string    — Easing style name. Default: "Sine".
-            direction     : string    — Easing direction. Default: "Out".
-            repeat_       : number    — Number of additional repetitions. -1 = infinite. Default: 0.
-            reverse       : boolean   — If true, even cycles play in reverse. Default: false.
-            delay         : number    — Initial delay in seconds before playback starts. Default: 0.
-            freezePhysics : boolean   — If true, forces Velocity to zero during animation. Default: true when position is defined.
-            onComplete    : function  — Callback invoked when the tween finishes. No arguments.
-            onUpdate      : function  — Callback invoked every frame. Receives (easedValue: number).
-
-    ──────────────────────────────────────────────────────────
-    Tween:Play() → nil
-    ──────────────────────────────────────────────────────────
-        Starts the animation. Does nothing if already playing.
-
-    ──────────────────────────────────────────────────────────
-    Tween:Stop() → nil
-    ──────────────────────────────────────────────────────────
-        Stops the animation at its current position and cleans up the physics thread.
-        Does not invoke onComplete.
-
-    ──────────────────────────────────────────────────────────
-    Tween:Cancel() → nil
-    ──────────────────────────────────────────────────────────
-        Alias for Stop(). Stops and marks the tween as cancelled without calling onComplete.
-
-    ──────────────────────────────────────────────────────────
-    Tween:Pause() → nil
-    ──────────────────────────────────────────────────────────
-        Pauses the animation while preserving current progress.
-
-    ──────────────────────────────────────────────────────────
-    Tween:Resume() → nil
-    ──────────────────────────────────────────────────────────
-        Resumes the animation from where it was paused.
-
-    ──────────────────────────────────────────────────────────
-    Tween:IsPlaying() → boolean
-    ──────────────────────────────────────────────────────────
-        Returns true if the animation is currently running and not paused.
-
-    ──────────────────────────────────────────────────────────
-    Tween:GetProgress() → number
-    ──────────────────────────────────────────────────────────
-        Returns the current normalized progress [0, 1] of the active cycle.
+    Tween:Play()        -> nil     Starts the animation. Does nothing if already playing.
+    Tween:Stop()        -> nil     Stops the animation. Does not invoke onComplete.
+    Tween:Cancel()      -> nil     Alias for Stop().
+    Tween:Pause()       -> nil     Pauses while preserving current progress.
+    Tween:Resume()      -> nil     Resumes from where it was paused.
+    Tween:IsPlaying()   -> boolean Returns true if running and not paused.
+    Tween:GetProgress() -> number  Returns normalized progress [0, 1] of the active cycle.
 ]]
 
 -- ============================================================
@@ -76,11 +45,11 @@
 -- ============================================================
 
 local EasingStyles = {
-    Linear  = function(t: number): number return t end,
-    Quad    = function(t: number): number return t * t end,
-    Cubic   = function(t: number): number return t * t * t end,
-    Sine    = function(t: number): number return 1 - math.cos(t * math.pi / 2) end,
-    Bounce  = function(t: number): number
+    Linear = function(t) return t end,
+    Quad   = function(t) return t * t end,
+    Cubic  = function(t) return t * t * t end,
+    Sine   = function(t) return 1 - math.cos(t * math.pi / 2) end,
+    Bounce = function(t)
         if t < 1 / 2.75 then
             return 7.5625 * t * t
         elseif t < 2 / 2.75 then
@@ -94,15 +63,15 @@ local EasingStyles = {
             return 7.5625 * t * t + 0.984375
         end
     end,
-    Back    = function(t: number): number
+    Back = function(t)
         local s = 1.70158
         return t * t * ((s + 1) * t - s)
     end,
-    Elastic = function(t: number): number
+    Elastic = function(t)
         if t == 0 or t == 1 then return t end
         return -math.pow(2, 10 * (t - 1)) * math.sin((t - 1.1) * 5 * math.pi)
     end,
-    Expo    = function(t: number): number
+    Expo = function(t)
         return t == 0 and 0 or math.pow(2, 10 * (t - 1))
     end,
 }
@@ -112,9 +81,9 @@ local EasingStyles = {
 -- ============================================================
 
 local EasingDirections = {
-    In    = function(s, t: number): number return s(t) end,
-    Out   = function(s, t: number): number return 1 - s(1 - t) end,
-    InOut = function(s, t: number): number
+    In    = function(s, t) return s(t) end,
+    Out   = function(s, t) return 1 - s(1 - t) end,
+    InOut = function(s, t)
         if t < 0.5 then
             return s(t * 2) / 2
         else
@@ -127,7 +96,7 @@ local EasingDirections = {
 -- Internal utilities
 -- ============================================================
 
-local function lerpV3(a: Vector3, b: Vector3, t: number): Vector3
+local function lerpV3(a, b, t)
     return Vector3.new(
         a.X + (b.X - a.X) * t,
         a.Y + (b.Y - a.Y) * t,
@@ -135,7 +104,7 @@ local function lerpV3(a: Vector3, b: Vector3, t: number): Vector3
     )
 end
 
-local function assertType(value: any, expected: string, field: string)
+local function assertType(value, expected, field)
     if value ~= nil and type(value) ~= expected then
         error(("TweenService: config.%s must be of type %s, got %s"):format(field, expected, type(value)), 2)
     end
@@ -148,7 +117,7 @@ end
 local Tween = {}
 Tween.__index = Tween
 
-function Tween.new(instance: BasePart, config: table)
+function Tween.new(instance, config)
     assert(instance, "TweenService: 'instance' cannot be nil.")
     assert(type(config) == "table", "TweenService: 'config' must be a table.")
 
@@ -195,9 +164,8 @@ function Tween.new(instance: BasePart, config: table)
         dName = "Out"
     end
 
-    self._style         = EasingStyles[sName]
-    self._direction     = EasingDirections[dName]
-
+    self._style          = EasingStyles[sName]
+    self._direction      = EasingDirections[dName]
     self._playing        = false
     self._cancelled      = false
     self._paused         = false
@@ -208,7 +176,7 @@ function Tween.new(instance: BasePart, config: table)
     return self
 end
 
--- ── Physics freeze ────────────────────────────────────────────
+-- Physics freeze
 
 function Tween:_startVelocityReset()
     if not self.freezePhysics then return end
@@ -231,7 +199,7 @@ function Tween:_stopVelocityReset()
     end
 end
 
--- ── Public API ────────────────────────────────────────────────
+-- Public API
 
 function Tween:Play()
     if self._playing then return end
@@ -337,11 +305,11 @@ function Tween:Resume()
     end
 end
 
-function Tween:IsPlaying(): boolean
+function Tween:IsPlaying()
     return self._playing and not self._paused
 end
 
-function Tween:GetProgress(): number
+function Tween:GetProgress()
     return self._progress
 end
 
@@ -352,13 +320,7 @@ end
 local TweenService = {}
 TweenService.__index = TweenService
 
---[[
-    TweenService.new(instance: BasePart, config: table) → Tween
-    Creates and returns a Tween object ready to be played.
-    See the module documentation at the top of this file
-    for all available config fields.
-]]
-function TweenService.new(instance: BasePart, config: table)
+function TweenService.new(instance, config)
     return Tween.new(instance, config)
 end
 
