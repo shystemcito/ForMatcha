@@ -1,5 +1,6 @@
 local executor = identifyexecutor()
 if executor ~= "Matcha" then error("This script require Matcha LuaVM.") end
+notify("Starting - By shystemmm", "Build a Boat AutoFarm", 5)
 
 local loaderSource = game:HttpGet("https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/Loader.luau")
 local fn, loaderErr = loadstring("MatchaLib = (function()\n" .. loaderSource .. "\nend)()")
