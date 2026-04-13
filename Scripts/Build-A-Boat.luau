@@ -17,7 +17,7 @@ local Workspace = game:GetService("Workspace")
 local localPlayer = Players.LocalPlayer
 local charService = CharacterService.new(localPlayer)
 
-local START_POS  = Vector3.new(-50, 60, 800)
+local START_POS  = Vector3.new(-50, 60, 700)
 local MIDDLE_POS = Vector3.new(-50, 60, 8775)
 
 local function getEndPos()
@@ -40,7 +40,7 @@ local function getEndPos()
 end
 
 local function tweenTo(root, targetPos, speed, style, direction)
-    speed     = speed     or 150
+    speed     = speed     or 500
     style     = style     or "Sine"
     direction = direction or "Out"
 
@@ -97,13 +97,13 @@ local function runMovementSequence()
     end
 
     tweenTo(root, START_POS, 1500, "Linear", "In")
-    tweenTo(root, MIDDLE_POS, 600, "Linear", "In")
+    tweenTo(root, MIDDLE_POS, 550, "Linear", "In")
 
     while not hasReachedEnd() do
         local endPos = getEndPos()
 
         if endPos then
-            tweenTo(root, endPos, 800, "Linear", "In")
+            tweenTo(root, endPos, 750, "Linear", "In")
         else
             warn("[AutoMove] EndPos not available. Retrying in 1s...")
             task.wait(1)
@@ -114,8 +114,8 @@ local function runMovementSequence()
         task.wait(0.25)
     end
 
-    tweenTo(root, MIDDLE_POS, 1200,  "Linear", "In")
-    tweenTo(root, START_POS,  600, "Linear", "In")
+    tweenTo(root, MIDDLE_POS, 1500,  "Linear", "In")
+    tweenTo(root, START_POS,  650, "Linear", "In")
 end
 
 charService:OnCharacterAdded(function(_character)
