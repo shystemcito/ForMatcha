@@ -2,32 +2,37 @@
 
 Collection of Lua libraries designed for Matcha LuaVM.
 
-## Loading any library
+## Loading libraries
 
-Since Matcha's `loadstring` does not propagate return values from the chunk
-scope, every library must be loaded using this wrapper pattern:
+### First — load the Loader
+
+The Loader itself must be bootstrapped once using the raw wrapper:
 
 ```lua
-local source = game:HttpGet(
-    "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/LibraryName.luau"
+local loaderSource = game:HttpGet(
+    "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/Loader.luau"
 )
-local fn, err = loadstring("MatchaLib = (function()\n" .. source .. "\nend)()")
+local fn, err = loadstring("MatchaLib = (function()\n" .. loaderSource .. "\nend)()")
 if not fn then
     print("COMPILE ERROR: " .. tostring(err))
     return
 end
 fn()
-local LibraryName = MatchaLib
+local Loader = MatchaLib
 ```
 
-Replace `LibraryName` with the name of the library you want to load.
-The global `MatchaLib` is a temporary bridge — reassign it immediately
-to a local variable so it does not conflict with other libraries.
+### Then — load any library with one line
+
+```lua
+local TweenService = Loader.load("TweenService")
+local OtraLib      = Loader.load("OtraLib")
+```
 
 ## Available libraries
 
 | Library | Description |
 |---------|-------------|
+| Loader | Utility to load ForMatcha libraries from GitHub |
 | TweenService | Position animation with easing styles for BasePart instances |
 
 ## Per-library usage
