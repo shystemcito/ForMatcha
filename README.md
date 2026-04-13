@@ -11,13 +11,18 @@ scope, every library must be loaded using this wrapper pattern:
 local source = game:HttpGet(
     "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/LibraryName.luau"
 )
-loadstring("MatchaLib = (function()\n" .. source .. "\nend)")()
+local fn, err = loadstring("MatchaLib = (function()\n" .. source .. "\nend)()")
+if not fn then
+    print("COMPILE ERROR: " .. tostring(err))
+    return
+end
+fn()
 local LibraryName = MatchaLib
 ```
 
 Replace `LibraryName` with the name of the library you want to load.
-The global `MatchaLib` is just a temporary bridge — reassign it immediately
-to a local variable and it won't conflict with other libraries.
+The global `MatchaLib` is a temporary bridge — reassign it immediately
+to a local variable so it does not conflict with other libraries.
 
 ## Available libraries
 
