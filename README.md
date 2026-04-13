@@ -9,14 +9,9 @@ Collection of Lua libraries designed for Matcha LuaVM.
 The Loader itself must be bootstrapped once using the raw wrapper:
 
 ```lua
-local loaderSource = game:HttpGet(
-    "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/Loader.luau"
-)
+local loaderSource = game:HttpGet("https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/Loader.luau")
 local fn, err = loadstring("MatchaLib = (function()\n" .. loaderSource .. "\nend)()")
-if not fn then
-    print("COMPILE ERROR: " .. tostring(err))
-    return
-end
+if not fn then error("COMPILE ERROR: " .. tostring(err)) return end
 fn()
 local Loader = MatchaLib
 ```
