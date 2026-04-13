@@ -70,9 +70,9 @@
         Safe to call multiple times.
 ]]
 
-local POLL_INTERVAL     = 0.1
+local POLL_INTERVAL     = 0.25
 local ROOT_WAIT_TIMEOUT = 5
-local ROOT_WAIT_STEP    = 0.05
+local ROOT_WAIT_STEP    = 0.1
 
 -- ============================================================
 -- Internal utilities
