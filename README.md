@@ -24,8 +24,8 @@ local Loader = MatchaLib
 ### Then — load any library with one line
 
 ```lua
-local TweenService = Loader.load("TweenService")
-local OtraLib      = Loader.load("OtraLib")
+local TweenService     = Loader.load("TweenService")
+local CharacterService = Loader.load("CharacterService")
 ```
 
 ## Available libraries
@@ -34,8 +34,41 @@ local OtraLib      = Loader.load("OtraLib")
 |---------|-------------|
 | Loader | Utility to load ForMatcha libraries from GitHub |
 | TweenService | Position animation with easing styles for BasePart instances |
+| CharacterService | Character lifecycle management (spawn, respawn, death) |
 
 ## Per-library usage
 
 Each library file contains its own documentation block at the top
 with all available functions, arguments, and types.
+
+## Examples
+
+### TweenService — move 100 studs up
+
+```lua
+local TweenService = Loader.load("TweenService")
+local Players      = game:GetService("Players")
+local root         = Players.LocalPlayer.Character.HumanoidRootPart
+
+local tween = TweenService.new(root, {
+    position      = root.Position + Vector3.new(0, 100, 0),
+    speed         = 500,
+    style         = "Sine",
+    direction     = "Out",
+    freezePhysics = true,
+    onComplete    = function() print("Done.") end,
+})
+tween:Play()
+```
+
+### CharacterService — detect respawn
+
+```lua
+local CharacterService = Loader.load("CharacterService")
+local Players          = game:GetService("Players")
+local charService      = CharacterService.new(Players.LocalPlayer)
+
+charService:OnCharacterAdded(function(character)
+    print("Respawned as: " .. character.Name)
+end)
+```
