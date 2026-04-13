@@ -76,7 +76,7 @@ end
 
 local function hasReachedEnd()
     local ok, result = pcall(function()
-        return Players.Shystemcito.OtherData.End.Value
+        return localPlayer.OtherData.End.Value
     end)
     if not ok then return false end
     return result == "EndReached"
