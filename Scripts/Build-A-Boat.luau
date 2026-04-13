@@ -20,6 +20,19 @@ local charService = CharacterService.new(localPlayer)
 local START_POS  = Vector3.new(-50, 60, 700)
 local MIDDLE_POS = Vector3.new(-50, 60, 8775)
 
+local currentToken = nil
+
+local function newToken()
+    local token = { alive = true }
+    return token
+end
+
+local function cancelCurrent()
+    if currentToken then
+        currentToken.alive = false
+    end
+end
+
 local function getEndPos()
     local boatStages   = Workspace:FindFirstChild("BoatStages")
     if not boatStages then warn("[AutoMove] BoatStages not found.") return nil end
@@ -39,7 +52,7 @@ local function getEndPos()
     return trigger.Position + Vector3.new(0, 5, -5)
 end
 
-local function tweenTo(root, targetPos, speed, style, direction)
+local function tweenTo(root, targetPos, speed, style, direction, token)
     speed     = speed     or 500
     style     = style     or "Sine"
     direction = direction or "Out"
@@ -59,8 +72,14 @@ local function tweenTo(root, targetPos, speed, style, direction)
     tween:Play()
 
     while not done do
-        task.wait(0.05)
+        if token and not token.alive then
+            tween:Stop()
+            return false
+        end
+        task.wait(0.1)
     end
+
+    return true
 end
 
 local function waitForChild(instance, childName, timeout)
@@ -83,7 +102,36 @@ local function hasReachedEnd()
     return result == "EndReached"
 end
 
-local function runMovementSequence()
+local function isStageComplete(stageIndex)
+    local otherData = localPlayer:FindFirstChild("OtherData")
+    local stageValue = otherData and otherData:FindFirstChild("Stage" .. stageIndex)
+    return stageValue and stageValue.Value ~= ""
+end
+
+local function doStages(root, token)
+    local normalStages = Workspace:FindFirstChild("BoatStages") and Workspace.BoatStages:FindFirstChild("NormalStages")
+
+    for i = 9, 0, -1 do
+        if not token.alive then return end
+
+        if not isStageComplete(i) then
+            local caveIndex = i + 1
+            local cave = normalStages and normalStages:FindFirstChild("CaveStage" .. caveIndex)
+            local part = cave and cave:FindFirstChild("DarknessPart")
+
+            while not isStageComplete(i) do
+                if not token.alive then return end
+                if part then
+                    local ok = tweenTo(root, part.Position + Vector3.new(0, 0, -75), 8000, "Linear", "In", token)
+                    if not ok then return end
+                end
+                task.wait(0.25)
+            end
+        end
+    end
+end
+
+local function runMovementSequence(token)
     local root = charService:GetRoot()
     if not root then
         local char = charService:GetCharacter()
@@ -96,14 +144,20 @@ local function runMovementSequence()
         return
     end
 
-    tweenTo(root, START_POS, 1500, "Linear", "In")
-    tweenTo(root, MIDDLE_POS, 550, "Linear", "In")
+    if not token.alive then return end
+    tweenTo(root, START_POS, 1500, "Linear", "In", token)
+
+    if not token.alive then return end
+    tweenTo(root, MIDDLE_POS, 600, "Linear", "In", token)
 
     while not hasReachedEnd() do
+        if not token.alive then return end
+
         local endPos = getEndPos()
 
         if endPos then
-            tweenTo(root, endPos, 750, "Linear", "In")
+            local ok = tweenTo(root, endPos, 600, "Linear", "In", token)
+            if not ok then return end
         else
             warn("[AutoMove] EndPos not available. Retrying in 1s...")
             task.wait(1)
@@ -114,12 +168,25 @@ local function runMovementSequence()
         task.wait(0.25)
     end
 
-    tweenTo(root, MIDDLE_POS, 1500,  "Linear", "In")
-    tweenTo(root, START_POS,  650, "Linear", "In")
+    if not token.alive then return end
+    tweenTo(root, MIDDLE_POS, 1500, "Linear", "In", token)
+
+    if not token.alive then return end
+    doStages(root, token)
 end
 
 charService:OnCharacterAdded(function(_character)
-    task.spawn(runMovementSequence)
+    cancelCurrent()
+    local token = newToken()
+    currentToken = token
+    task.spawn(function()
+        runMovementSequence(token)
+    end)
 end)
 
-task.spawn(runMovementSequence)
+cancelCurrent()
+local token = newToken()
+currentToken = token
+task.spawn(function()
+    runMovementSequence(token)
+end)
