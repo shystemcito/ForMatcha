@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- Loader — v1.2.1
+-- Loader — v1.2.2
 -- Utility to load ForMatcha libraries from GitHub.
 -- ============================================================
 
@@ -24,7 +24,7 @@
         This bypasses Matcha's pcall return-value limitation entirely.
 ]]
 
-print("Using V1.2.1")
+print("Using V1.2.2")
 
 local BASE_URL = "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/"
 
