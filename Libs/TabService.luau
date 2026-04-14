@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- TabService - v1.0.0
+-- TabService - v1.1.0
 -- Robust wrapper around Matcha's UI.AddTab / Section system.
 -- Provides lifecycle management, state isolation, typed
 -- widget builders, and safe teardown.
@@ -17,7 +17,7 @@
 
     Tab:mount() -> void
         Registers the tab with UI.AddTab and shows a loading
-        spinner until :ready() is called.
+        screen until :ready() is called.
 
     Tab:ready() -> void
         Signals that async setup is done. Triggers first real render.
@@ -41,17 +41,27 @@
 
     Section:text(content: string) -> void
     Section:spacing() -> void
-    Section:button(label: string, w: number?, h: number?, fn: function) -> void
-    Section:inputText(key: string, placeholder: string, default: string) -> void
-    Section:combo(key: string, label: string, options: table, idx: number) -> void
 
-    -- State helpers (thin wrappers around UI.GetValue / UI.SetValue) --
+    Section:button(label: string, fn: function) -> void
+    Section:button(label: string, w: number, h: number, fn: function) -> void
+
+    Section:toggle(key: string, label: string, default: boolean?) -> boolean
+        Native Matcha flip-switch. Returns the current boolean value.
+        State is persisted automatically by Matcha via the key.
+
+    Section:checkbox(key: string, label: string, default: boolean?) -> boolean
+        Native Matcha checkbox. Returns the current boolean value.
+
+    Section:slider(key: string, label: string, min: number, max: number, default: number?) -> number
+        Native Matcha slider. Returns the current numeric value.
+
+    Section:inputText(key: string, placeholder: string, default: string?) -> void
+    Section:combo(key: string, label: string, options: table, idx: number?) -> void
+
+    -- State helpers (namespaced to tab name, no key collisions) --
 
     Ctx:get(key: string) -> any
     Ctx:set(key: string, value: any) -> void
-
-        Keys passed to Ctx:get/set are automatically namespaced to the
-        tab name to avoid collisions with other scripts.
 ]]
 
 --  internal helpers 
@@ -66,6 +76,11 @@ local function assertFn(v, name)
         "TabService: '" .. name .. "' must be a function.")
 end
 
+local function assertNum(v, name)
+    assert(type(v) == "number",
+        "TabService: '" .. name .. "' must be a number.")
+end
+
 --  Section wrapper 
 
 local Section = {}
@@ -74,7 +89,6 @@ Section.__index = Section
 function Section._new(raw, subTabs)
     local self = setmetatable({}, Section)
     self._raw = raw
-    -- expose .page only when sub-tabs exist
     if subTabs then
         self.page = raw.page
     end
@@ -92,7 +106,7 @@ end
 
 function Section:button(label, w, h, fn)
     assertStr(label, "label")
-    -- allow omitting w/h: button(label, fn)
+    -- short form: button(label, fn)
     if type(w) == "function" then
         fn = w
         self._raw:Button(label, fn)
@@ -100,6 +114,38 @@ function Section:button(label, w, h, fn)
         assertFn(fn, "fn")
         self._raw:Button(label, w, h, fn)
     end
+end
+
+function Section:toggle(key, label, default)
+    -- Native Matcha flip-switch widget.
+    -- State is owned by Matcha (UI.GetValue/SetValue).
+    -- Returns current boolean so callers can branch on the value.
+    assertStr(key,   "key")
+    assertStr(label, "label")
+    local init = (default == true) and true or false
+    self._raw:Toggle(key, label, init)
+    local val = UI.GetValue(key)
+    return (val == true or val == 1)
+end
+
+function Section:checkbox(key, label, default)
+    -- Native Matcha checkbox widget.
+    assertStr(key,   "key")
+    assertStr(label, "label")
+    local init = (default == true) and true or false
+    self._raw:Checkbox(key, label, init)
+    local val = UI.GetValue(key)
+    return (val == true or val == 1)
+end
+
+function Section:slider(key, label, min, max, default)
+    assertStr(key,   "key")
+    assertStr(label, "label")
+    assertNum(min,   "min")
+    assertNum(max,   "max")
+    local init = (type(default) == "number") and default or min
+    self._raw:Slider(key, label, min, max, init)
+    return UI.GetValue(key) or init
 end
 
 function Section:inputText(key, placeholder, default)
@@ -128,7 +174,7 @@ function Ctx._new(tab, rawTab)
 end
 
 function Ctx:_ns(key)
-    -- namespace key to tab name so scripts never collide
+    -- prefix key with tab name to avoid global collisions
     return self._tab._name .. "::" .. key
 end
 
@@ -181,19 +227,17 @@ function Tab:mount()
         "TabService: tab '" .. self._name .. "' is already mounted.")
 
     self._mounted = true
-    local self_ = self  -- upvalue for closure
+    local self_ = self
 
     UI.AddTab(self._name, function(rawTab)
         local ctx = Ctx._new(self_, rawTab)
 
-        -- loading guard
         if not self_._ready then
             local s = rawTab:Section("Please wait", "Left")
             s:Text("[ " .. self_._name .. " ] Loading...")
             return
         end
 
-        -- safe builder invocation
         local ok, err = pcall(self_._builder, ctx)
         if not ok then
             local errSec = rawTab:Section("TabService Error", "Left")
