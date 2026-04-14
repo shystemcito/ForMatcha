@@ -123,7 +123,7 @@ local function doStages(root, token)
                     local ok = tweenTo(root, part.Position + Vector3.new(0, 0, -75), 8000, "Linear", "In", token)
                     if not ok then return end
                 end
-                task.wait(0.25)
+                task.wait(0.1)
             end
         end
     end
