@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- Loader — v1.1.1
+-- Loader — v1.2.0
 -- Utility to load ForMatcha libraries from GitHub.
 -- ============================================================
 --[[
@@ -11,18 +11,23 @@
         Errors on network failure, compile error, runtime error, or nil return.
 
     FIXED in v1.1.1:
-        The previous wrapping strategy
-            loadstring("MatchaLoaderTemp = (function()\n" .. source .. "\nend)()")
-        broke any library that uses '...' at chunk level (a valid Luau pattern),
-        because wrapping in an anonymous function removes the vararg context.
-        It also relied on a shared global (MatchaLoaderTemp) which is fragile.
+        Removed the (function()...end)() wrapper that stripped the chunk's
+        implicit vararg context and caused "Cannot use '...' outside of a
+        vararg function" in libraries that used '...' at chunk level.
 
-        Fix: pass the raw source directly to loadstring. The chunk is already an
-        implicit vararg function in Luau, so '...' is always valid. The return
-        value of the chunk is captured by calling fn() directly — no global needed.
+    FIXED in v1.2.0:
+        Matcha's pcall does NOT forward the wrapped function's return values —
+        it returns only (true/false, errorMessage). Writing:
+            local runOk, lib = pcall(fn)
+        always leaves `lib` as nil even when fn() returns a table successfully.
+
+        Fix: capture the return value via an upvalue inside the pcall wrapper.
+        The function passed to pcall assigns fn()'s result to a local upvalue,
+        and we read that upvalue after pcall confirms success. This is the only
+        pattern that works reliably in Matcha's LuaVM.
 ]]
 
-print("Using V1.1.1")
+print("Using V1.2.0")
 local BASE_URL = "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/"
 
 local Loader = {}
@@ -54,11 +59,18 @@ function Loader.load(libName)
     end
 
     -- == Execute ===============================================
-    -- Call the chunk directly; its return value IS the library table.
-    -- No shared global is needed.
-    local runOk, lib = pcall(fn)
+    -- Matcha's pcall does not forward return values from the wrapped
+    -- function, so we cannot write:
+    --     local runOk, lib = pcall(fn)   -- lib is always nil in Matcha!
+    --
+    -- Instead, we capture the return value through an upvalue that the
+    -- inner closure writes to before pcall can observe it.
+    local lib = nil
+    local runOk, runErr = pcall(function()
+        lib = fn()
+    end)
     if not runOk then
-        error("Loader: runtime error in '" .. libName .. "': " .. tostring(lib))
+        error("Loader: runtime error in '" .. libName .. "': " .. tostring(runErr))
     end
 
     -- == Validate ==============================================
