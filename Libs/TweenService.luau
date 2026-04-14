@@ -184,8 +184,8 @@ function Tween:_startVelocityReset()
     self._velocityThread = task.spawn(function()
         while self._playing and not self._cancelled do
             pcall(function()
-                self.instance.Velocity               = Vector3.new(0, 0, 0)
-                self.instance.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+                self.instance.Velocity               = Vector3.new(0, 5, 0)
+                self.instance.AssemblyLinearVelocity = Vector3.new(0, 5, 0)
             end)
             task.wait(0.05)
         end
