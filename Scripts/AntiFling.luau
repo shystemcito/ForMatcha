@@ -1,6 +1,3 @@
-local executor, version = identifyexecutor()
-if executor ~= "Matcha" then error("[NoCollide] Not suppported: " .. tostring(executor)) end
-
 notify("AntiFling", "Anti-Fling Enabled - By shystemmm", 5)
 local Players    = game:GetService("Players")
 local RunService = game:GetService("RunService")
