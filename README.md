@@ -75,20 +75,20 @@ end)
 ```lua
 local TabService = Loader.load("TabService")
 
-local tab = TabService.new("Mi Hub")
+local tab = TabService.new("My Hub")
 
 tab:setBuilder(function(ctx)
-    local left  = ctx:leftSection("Opciones", {"General", "Avanzado"})
+    local left  = ctx:leftSection("Options", {"General", "Advanced"})
     local right = ctx:rightSection("Info")
 
     if left.page == 0 then
-        left:inputText("query", "Buscar...", "")
+        left:inputText("query", "Search...", "")
         left:spacing()
-        left:button("Ejecutar", 200, 34, function()
-            -- lógica aquí
+        left:button("Execute", 200, 34, function()
+            -- logic here
         end)
     elseif left.page == 1 then
-        left:combo("sort", "Orden", {"A-Z", "Z-A"}, ctx:get("sort") or 0)
+        left:combo("sort", "Order", {"A-Z", "Z-A"}, ctx:get("sort") or 0)
     end
 
     local q = ctx:get("query") or ""
@@ -98,9 +98,9 @@ end)
 tab:mount()
 
 task.spawn(function()
-    -- setup asíncrono (HTTP, parseo, etc.)
+    -- async setup (HTTP, parsing, etc.)
     task.wait(2)
     tab:ready()
-    tab:notify("Hub listo")
+    tab:notify("Hub ready")
 end)
 ```
