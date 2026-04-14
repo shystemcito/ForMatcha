@@ -1,4 +1,6 @@
 notify("Starting - By shystemmm", "Build a Boat AutoFarm", 5)
+notify("Warning", "Build a boat AF under maintenance, try again later", 10)
+print("Build a boat AF under maintenance, try again later")
 
 local loaderSource = game:HttpGet("https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/Loader.luau")
 local fn, loaderErr = loadstring("MatchaLib = (function()\n" .. loaderSource .. "\nend)()")
