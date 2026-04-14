@@ -103,9 +103,13 @@ end
 -- Dispatches a callback in its own thread so one slow callback
 -- cannot block the watcher loop or other callbacks.
 local function dispatch(callback, ...)
-    -- type: (callback: function, ...: any) -> void
+    -- Capture the varargs and their count immediately
+    local args = {...}
+    local count = select("#", ...) 
+
     task.spawn(function()
-        local ok, err = pcall(callback, ...)
+        -- Unpack the captured arguments into the pcall
+        local ok, err = pcall(callback, unpack(args, 1, count))
         if not ok then
             warn("CharacterService: callback error: " .. tostring(err))
         end
