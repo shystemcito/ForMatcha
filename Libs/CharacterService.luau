@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- CharacterService — v2.0.0
+-- CharacterService — v2.0.1
 -- Character lifecycle management library for Matcha LuaVM.
 -- Handles character existence, respawn detection, and
 -- root/humanoid access using polling and memory address
@@ -74,9 +74,9 @@
         Clears all registered callbacks. Safe to call multiple times.
 ]]
 
-local POLL_INTERVAL     = 0.1   -- seconds between address checks
+local POLL_INTERVAL     = 0.25   -- seconds between address checks
 local ROOT_WAIT_TIMEOUT = 5     -- max seconds to wait for HumanoidRootPart
-local ROOT_WAIT_STEP    = 0.05  -- polling step while waiting for root
+local ROOT_WAIT_STEP    = 0.1  -- polling step while waiting for root
 
 -- ============================================================
 -- Internal utilities
