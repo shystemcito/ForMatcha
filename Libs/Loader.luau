@@ -1,8 +1,9 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- Loader — v1.2.0
+-- Loader — v1.2.1
 -- Utility to load ForMatcha libraries from GitHub.
 -- ============================================================
+
 --[[
     Loader.load(libName: string) -> table
         libName : string - Name of the library file without extension.
@@ -10,24 +11,21 @@
         Returns the module table returned by the library.
         Errors on network failure, compile error, runtime error, or nil return.
 
-    FIXED in v1.1.1:
-        Removed the (function()...end)() wrapper that stripped the chunk's
-        implicit vararg context and caused "Cannot use '...' outside of a
-        vararg function" in libraries that used '...' at chunk level.
+    NOTE (v1.2.1):
+        Reverted execution strategy to the v1.0.0 upvalue pattern that is
+        proven to work in Matcha's LuaVM. The v1.2.0 pcall-upvalue approach
+        broke because Matcha's pcall does NOT forward return values — the
+        loadstring chunk runs fine, but the return value is lost.
 
-    FIXED in v1.2.0:
-        Matcha's pcall does NOT forward the wrapped function's return values —
-        it returns only (true/false, errorMessage). Writing:
-            local runOk, lib = pcall(fn)
-        always leaves `lib` as nil even when fn() returns a table successfully.
-
-        Fix: capture the return value via an upvalue inside the pcall wrapper.
-        The function passed to pcall assigns fn()'s result to a local upvalue,
-        and we read that upvalue after pcall confirms success. This is the only
-        pattern that works reliably in Matcha's LuaVM.
+        The working pattern wraps the source in:
+            MatchaLoaderTemp = (function() <source> end)()
+        The IIFE executes the source and assigns its return value to the
+        global MatchaLoaderTemp, which we then read and clear.
+        This bypasses Matcha's pcall return-value limitation entirely.
 ]]
 
-print("Using V1.2.0")
+print("Using V1.2.1")
+
 local BASE_URL = "https://raw.githubusercontent.com/shystemcito/ForMatcha/refs/heads/main/Libs/"
 
 local Loader = {}
@@ -38,45 +36,28 @@ function Loader.load(libName)
         "Loader: libName must be a non-empty string.")
 
     -- == Fetch source ==========================================
-    local ok, source = pcall(game.HttpGet, game, BASE_URL .. libName .. ".luau")
-    if not ok then
-        error("Loader: network error fetching '" .. libName .. "': " .. tostring(source))
-    end
+    local source = game:HttpGet(BASE_URL .. libName .. ".luau")
     if type(source) ~= "string" or #source == 0 then
         error("Loader: empty or invalid response for '" .. libName .. "'.")
     end
 
-    -- == Compile ===============================================
-    -- loadstring returns the source as a chunk function.
-    -- The chunk is an implicit vararg function, so libraries may
-    -- safely use '...' at the top level (e.g. for module args).
-    -- We do NOT wrap in an extra (function()...end)() — that would
-    -- strip the vararg context and cause "Cannot use '...' outside
-    -- of a vararg function" errors in any library that relies on it.
-    local fn, compileErr = loadstring(source, libName)
+    -- == Compile + Execute =====================================
+    -- Wrap in an IIFE and assign the return value to a known global.
+    -- This is the only reliable way to capture a chunk's return value
+    -- in Matcha's LuaVM (pcall does not forward return values).
+    local fn, err = loadstring("MatchaLoaderTemp = (function()\n" .. source .. "\nend)()")
     if not fn then
-        error("Loader: compile error in '" .. libName .. "': " .. tostring(compileErr))
+        error("Loader: compile error in '" .. libName .. "': " .. tostring(err))
     end
 
-    -- == Execute ===============================================
-    -- Matcha's pcall does not forward return values from the wrapped
-    -- function, so we cannot write:
-    --     local runOk, lib = pcall(fn)   -- lib is always nil in Matcha!
-    --
-    -- Instead, we capture the return value through an upvalue that the
-    -- inner closure writes to before pcall can observe it.
-    local lib = nil
-    local runOk, runErr = pcall(function()
-        lib = fn()
-    end)
-    if not runOk then
-        error("Loader: runtime error in '" .. libName .. "': " .. tostring(runErr))
-    end
+    fn()
+
+    local lib = MatchaLoaderTemp
+    MatchaLoaderTemp = nil
 
     -- == Validate ==============================================
-    if lib == nil then
-        error("Loader: '" .. libName .. "' returned nil — missing return statement in the library.")
-    end
+    assert(lib ~= nil,
+        "Loader: '" .. libName .. "' returned nil — missing return statement.")
 
     return lib
 end
