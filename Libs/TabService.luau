@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- TabService - v1.1.0
+-- TabService — v2.0.0
 -- Robust wrapper around Matcha's UI.AddTab / Section system.
 -- Provides lifecycle management, state isolation, typed
 -- widget builders, and safe teardown.
@@ -8,63 +8,57 @@
 
 --[[
     TabService.new(tabName: string) -> Tab
-        Creates and registers a new Matcha tab.
-        tabName : string - Label shown in Matcha's sidebar.
 
     Tab:setBuilder(fn: function) -> void
-        fn(ctx) - Called every render frame. Receives a Ctx object.
-        Must be set before :mount() is called.
+        fn(ctx) called every render frame. Receives a Ctx object.
 
     Tab:mount() -> void
-        Registers the tab with UI.AddTab and shows a loading
-        screen until :ready() is called.
-
     Tab:ready() -> void
-        Signals that async setup is done. Triggers first real render.
-
     Tab:unmount() -> void
-        Calls UI.RemoveTab and cleans up all internal state.
-        Safe to call multiple times.
+        unmount() now cancels all running worker threads.
 
     Tab:notify(message: string, duration: number?) -> void
-        Shows a Matcha notification tied to this tab's name.
 
-    -- Ctx object (passed to the builder function) --
+    == Ctx ==================================================
 
     Ctx:leftSection(title: string, subTabs: table?) -> Section
     Ctx:rightSection(title: string, subTabs: table?) -> Section
-        Creates a Left/Right panel. subTabs is an optional string array.
-        Returns a Section object.
 
-    Section.page : number
-        Current sub-tab index (0-based). Only present when subTabs was given.
+    Ctx:get(key: string) -> any
+    Ctx:set(key: string, value: any) -> void
+
+    == Section ===============================================
 
     Section:text(content: string) -> void
     Section:spacing() -> void
 
-    Section:button(label: string, fn: function) -> void
-    Section:button(label: string, w: number, h: number, fn: function) -> void
+    Section:button(label: string, fn: function, opts?: table) -> void
+    Section:button(label: string, w: number, h: number, fn: function, opts?: table) -> void
+        opts.debounce : number   — cooldown in seconds between clicks. Default: 0.25.
+        opts.async    : boolean  — run fn in task.spawn. Default: true (always).
+        fn always runs asynchronously regardless of opts.async.
 
-    Section:toggle(key: string, label: string, default: boolean?) -> boolean
-        Native Matcha flip-switch. Returns the current boolean value.
-        State is persisted automatically by Matcha via the key.
+    Section:toggle(key: string, label: string, default: boolean?, callbacks?) -> boolean
+        callbacks can be:
+            - nil        : no side-effect, just reads and returns state.
+            - function   : treated as a loop body. Spawned in a worker thread
+                           while the toggle is ON. Worker is cancelled when OFF.
+                           The function is called repeatedly with task.wait(0)
+                           between iterations so it never blocks the render thread.
+            - table      : { onEnable: function?, onDisable: function? }
+                           onEnable fires once when toggle switches ON.
+                           onDisable fires once when toggle switches OFF.
+        Returns the current boolean state.
 
     Section:checkbox(key: string, label: string, default: boolean?) -> boolean
-        Native Matcha checkbox. Returns the current boolean value.
-
     Section:slider(key: string, label: string, min: number, max: number, default: number?) -> number
-        Native Matcha slider. Returns the current numeric value.
-
     Section:inputText(key: string, placeholder: string, default: string?) -> void
     Section:combo(key: string, label: string, options: table, idx: number?) -> void
-
-    -- State helpers (namespaced to tab name, no key collisions) --
-
-    Ctx:get(key: string) -> any
-    Ctx:set(key: string, value: any) -> void
 ]]
 
---  internal helpers 
+-- ============================================================
+-- Internal helpers
+-- ============================================================
 
 local function assertStr(v, name)
     assert(type(v) == "string" and #v > 0,
@@ -81,14 +75,70 @@ local function assertNum(v, name)
         "TabService: '" .. name .. "' must be a number.")
 end
 
---  Section wrapper 
+-- Safely calls a function and warns on error without crashing.
+local function safeCall(fn, ...)
+    local ok, err = pcall(fn, ...)
+    if not ok then
+        warn("[TabService] callback error: " .. tostring(err))
+    end
+end
+
+-- ============================================================
+-- WorkerRegistry — tracks all active worker threads per Tab
+-- so unmount() can cancel them all cleanly.
+-- ============================================================
+
+local WorkerRegistry = {}
+WorkerRegistry.__index = WorkerRegistry
+
+function WorkerRegistry.new()
+    local self = setmetatable({}, WorkerRegistry)
+    -- _threads[key] = { thread: thread, loopMode: boolean }
+    self._threads = {}
+    return self
+end
+
+-- Spawns a new worker thread and registers it under `key`.
+-- If a thread already exists for that key, it is cancelled first.
+function WorkerRegistry:spawn(key, fn)
+    -- type: (key: string, fn: function) -> void
+    self:cancel(key)
+    local thread = task.spawn(fn)
+    self._threads[key] = thread
+end
+
+-- Cancels the worker thread registered under `key`, if any.
+function WorkerRegistry:cancel(key)
+    -- type: (key: string) -> void
+    local thread = self._threads[key]
+    if thread then
+        pcall(task.cancel, thread)
+        self._threads[key] = nil
+    end
+end
+
+-- Cancels ALL registered worker threads.
+-- Called by Tab:unmount().
+function WorkerRegistry:cancelAll()
+    -- type: () -> void
+    for key, thread in pairs(self._threads) do
+        pcall(task.cancel, thread)
+        self._threads[key] = nil
+    end
+end
+
+-- ============================================================
+-- Section wrapper
+-- ============================================================
 
 local Section = {}
 Section.__index = Section
 
-function Section._new(raw, subTabs)
+function Section._new(raw, subTabs, workers)
+    -- workers: WorkerRegistry shared with the parent Tab
     local self = setmetatable({}, Section)
-    self._raw = raw
+    self._raw     = raw
+    self._workers = workers
     if subTabs then
         self.page = raw.page
     end
@@ -104,32 +154,124 @@ function Section:spacing()
     self._raw:Spacing()
 end
 
-function Section:button(label, w, h, fn)
+--[[
+    button(label, fn, opts?)
+    button(label, w, h, fn, opts?)
+
+    fn is ALWAYS executed asynchronously in task.spawn.
+    opts.debounce (number, default 0.25): minimum seconds between clicks.
+]]
+function Section:button(label, w, h, fn, opts)
     assertStr(label, "label")
-    -- short form: button(label, fn)
+
+    -- Resolve short-form: button(label, fn, opts?)
     if type(w) == "function" then
-        fn = w
-        self._raw:Button(label, fn)
+        opts = h       -- h slot holds opts in short form
+        fn   = w
+        w    = nil
+        h    = nil
+    end
+
+    assertFn(fn, "fn")
+
+    local debounce  = (opts and type(opts.debounce) == "number") and opts.debounce or 0.25
+    local lastPress = 0
+
+    -- Wrapper: enforces debounce and always runs fn in a new thread.
+    -- This ensures fn can contain loops, yields, or heavy work
+    -- without ever blocking the UI render thread.
+    local wrapped = function()
+        local now = os.clock()
+        if now - lastPress < debounce then return end
+        lastPress = now
+        task.spawn(safeCall, fn)
+    end
+
+    if w and h then
+        self._raw:Button(label, w, h, wrapped)
     else
-        assertFn(fn, "fn")
-        self._raw:Button(label, w, h, fn)
+        self._raw:Button(label, wrapped)
     end
 end
 
-function Section:toggle(key, label, default)
-    -- Native Matcha flip-switch widget.
-    -- State is owned by Matcha (UI.GetValue/SetValue).
-    -- Returns current boolean so callers can branch on the value.
+--[[
+    toggle(key, label, default?, callbacks?) -> boolean
+
+    callbacks variants:
+        nil      — no side-effect.
+        function — loop body, runs repeatedly in a worker thread while ON.
+                   Worker is cancelled automatically when toggle turns OFF.
+        table    — { onEnable: function?, onDisable: function? }
+                   Each fires once on state transition.
+
+    The builder runs every frame, so toggle() is called every frame.
+    Worker threads are only started/stopped when state actually changes
+    (tracked via _workers registry keyed by the toggle's key).
+    This is O(1) per frame when state is stable.
+]]
+function Section:toggle(key, label, default, callbacks)
     assertStr(key,   "key")
     assertStr(label, "label")
+
     local init = (default == true) and true or false
     self._raw:Toggle(key, label, init)
-    local val = UI.GetValue(key)
-    return (val == true or val == 1)
+
+    local val   = UI.GetValue(key)
+    local isOn  = (val == true or val == 1)
+
+    -- Determine callback mode
+    local cbMode = type(callbacks)
+    -- cbMode == "function" : loop mode
+    -- cbMode == "table"    : onEnable / onDisable mode
+    -- cbMode == "nil"      : no callbacks
+
+    -- Internal worker key uses toggle key directly.
+    -- WorkerRegistry handles dedup (won't re-spawn if already running).
+    local workerKey  = "toggle::" .. key
+    -- State-change tracking key (persisted across frames via UI.GetValue namespace)
+    local prevKey    = "tabsvc::prev::" .. key
+
+    local prevRaw    = UI.GetValue(prevKey)
+    local wasOn      = (prevRaw == true or prevRaw == 1)
+
+    -- Only act on state transitions, not every frame.
+    if isOn ~= wasOn then
+        UI.SetValue(prevKey, isOn)
+
+        if cbMode == "function" then
+            -- Loop mode: spawn a worker that calls the function repeatedly
+            -- with a yield between iterations. task.wait(0) yields control
+            -- back to the scheduler each iteration, so the render thread
+            -- is never starved even if callbacks is a tight computation.
+            if isOn then
+                self._workers:spawn(workerKey, function()
+                    while UI.GetValue(key) == true or UI.GetValue(key) == 1 do
+                        safeCall(callbacks)
+                        task.wait(0) -- cooperative yield — never blocks render
+                    end
+                    -- Clean up registry entry when loop exits naturally
+                    self._workers:cancel(workerKey)
+                end)
+            else
+                -- Toggle turned off — cancel the worker thread immediately.
+                self._workers:cancel(workerKey)
+            end
+
+        elseif cbMode == "table" then
+            -- onEnable / onDisable mode: fire once per transition.
+            if isOn and type(callbacks.onEnable) == "function" then
+                task.spawn(safeCall, callbacks.onEnable)
+            elseif not isOn and type(callbacks.onDisable) == "function" then
+                task.spawn(safeCall, callbacks.onDisable)
+            end
+        end
+        -- cbMode == "nil": nothing to do
+    end
+
+    return isOn
 end
 
 function Section:checkbox(key, label, default)
-    -- Native Matcha checkbox widget.
     assertStr(key,   "key")
     assertStr(label, "label")
     local init = (default == true) and true or false
@@ -161,7 +303,9 @@ function Section:combo(key, label, options, idx)
     self._raw:Combo(key, label, options, idx or 0)
 end
 
---  Ctx (render context) 
+-- ============================================================
+-- Ctx (render context passed to the builder each frame)
+-- ============================================================
 
 local Ctx = {}
 Ctx.__index = Ctx
@@ -174,7 +318,7 @@ function Ctx._new(tab, rawTab)
 end
 
 function Ctx:_ns(key)
-    -- prefix key with tab name to avoid global collisions
+    -- Namespace key with tab name to avoid collisions across tabs.
     return self._tab._name .. "::" .. key
 end
 
@@ -189,16 +333,18 @@ end
 function Ctx:leftSection(title, subTabs)
     assertStr(title, "title")
     local raw = self._rawTab:Section(title, "Left", subTabs)
-    return Section._new(raw, subTabs)
+    return Section._new(raw, subTabs, self._tab._workers)
 end
 
 function Ctx:rightSection(title, subTabs)
     assertStr(title, "title")
     local raw = self._rawTab:Section(title, "Right", subTabs)
-    return Section._new(raw, subTabs)
+    return Section._new(raw, subTabs, self._tab._workers)
 end
 
---  Tab 
+-- ============================================================
+-- Tab
+-- ============================================================
 
 local Tab = {}
 Tab.__index = Tab
@@ -210,6 +356,9 @@ function Tab._new(name)
     self._builder = nil
     self._mounted = false
     self._ready   = false
+    -- WorkerRegistry is created once per Tab and shared with all
+    -- Section instances created during the builder's execution.
+    self._workers = WorkerRegistry.new()
     return self
 end
 
@@ -233,13 +382,17 @@ function Tab:mount()
         local ctx = Ctx._new(self_, rawTab)
 
         if not self_._ready then
+            -- Show a loading placeholder while async setup runs.
             local s = rawTab:Section("Please wait", "Left")
             s:Text("[ " .. self_._name .. " ] Loading...")
             return
         end
 
+        -- Builder runs on the render thread — must stay lightweight.
+        -- All heavy work is pushed to worker threads by Section methods.
         local ok, err = pcall(self_._builder, ctx)
         if not ok then
+            -- Render the error inside the tab instead of crashing.
             local errSec = rawTab:Section("TabService Error", "Left")
             errSec:Text("Builder crashed:")
             errSec:Spacing()
@@ -257,7 +410,14 @@ end
 
 function Tab:unmount()
     if not self._mounted then return end
+
+    -- Cancel ALL active worker threads before removing the tab.
+    -- Without this, toggle loops and other workers would continue
+    -- running as zombie threads after the tab is gone.
+    self._workers:cancelAll()
+
     pcall(UI.RemoveTab, self._name)
+
     self._mounted = false
     self._ready   = false
 end
@@ -267,7 +427,9 @@ function Tab:notify(message, duration)
     notify(message, self._name, duration or 5)
 end
 
---  Public API 
+-- ============================================================
+-- Public API
+-- ============================================================
 
 local TabService = {}
 
