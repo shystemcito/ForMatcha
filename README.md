@@ -1,5 +1,4 @@
-# ForMatcha — Library Repository
-
+# ForMatcha — Library Repository (Claude)
 Collection of Lua libraries designed for Matcha LuaVM.
 
 ## Loading libraries
