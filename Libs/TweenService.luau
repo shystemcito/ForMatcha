@@ -176,11 +176,11 @@ local EasingStyles = {
 
     Elastic = function(t)
         if t == 0 or t == 1 then return t end
-        return -(math.pow(2, 10 * (t - 1)) * math.sin((t - 1.1) * 5 * math.pi))
+        return -((2 ^ (10 * (t - 1))) * math.sin((t - 1.1) * 5 * math.pi))
     end,
 
     Expo = function(t)
-        return t == 0 and 0 or math.pow(2, 10 * (t - 1))
+        return t == 0 and 0 or (2 ^ (10 * (t - 1)))
     end,
 }
 
