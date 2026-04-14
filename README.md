@@ -1,5 +1,7 @@
 # ForMatcha — Library Repository (Claude)
 Collection of Lua libraries designed for Matcha LuaVM.
+## matcha-luavm.skill
+This is a .skill file for Claude. It will help Claude write code for the Matcha environment without needing to be convinced or told exactly what to use. (It may be outdated; the documentation does not include the changes from April 2nd since they were not in the Matcha documentation.)
 
 ## Loading libraries
 
