@@ -1,6 +1,6 @@
 -- @env: Matcha LuaVM
 -- ============================================================
--- Loader - v2.0.0
+-- Loader - v2.0.1
 -- Utility to load ForMatcha libraries from GitHub.
 -- ============================================================
 
@@ -53,13 +53,19 @@ local function fetchSource(libName, url)
 end
 
 -- Compiles and executes source, returning the module value.
--- Uses `return (function() ... end)()` so the return value is
--- captured directly by pcall — no global temp variable needed.
+-- Strategy: injects a unique global key before running the chunk so
+-- the library's `return` value is captured via that global instead of
+-- relying on loadstring's return propagation, which is unreliable in
+-- the Matcha LuaVM when chunks contain nested returns or IIFE wrappers.
+-- The temporary global is always cleaned up after the call.
 -- Returns: (lib: table) or errors with a descriptive message.
 local function compileAndRun(libName, source)
-    -- Wrap in an IIFE so the library's `return` statement becomes
-    -- the value of the expression, captured by pcall below.
-    local chunk = "return (function()\n" .. source .. "\nend)()"
+    -- Build a unique global key that won't collide with user globals.
+    local globalKey = "__MatchaLoader_" .. libName:gsub("[^%w]", "_") .. "_" .. tostring(os.clock()):gsub("%.", "")
+
+    -- Wrap source so the return value is stored in the temp global,
+    -- making it retrievable regardless of loadstring return behaviour.
+    local chunk = globalKey .. " = (function()\n" .. source .. "\nend)()"
 
     local fn, compileErr = loadstring(chunk, "=" .. libName)
     if not fn then
@@ -69,11 +75,15 @@ local function compileAndRun(libName, source)
         )
     end
 
-    -- pcall captures the module value without any shared global.
-    local ok, lib = pcall(fn)
+    local ok, runErr = pcall(fn)
+
+    -- Always clean up the temp global, even on error.
+    local lib = _G[globalKey]
+    _G[globalKey] = nil
+
     if not ok then
         error(
-            ("Loader: runtime error initializing '%s': %s"):format(libName, tostring(lib)),
+            ("Loader: runtime error initializing '%s': %s"):format(libName, tostring(runErr)),
             2
         )
     end
@@ -135,6 +145,33 @@ function Loader.loaded()
         names[#names + 1] = name
     end
     return names
+end
+
+-- ============================================================
+-- Loader.bootstrap(source: string) -> Loader
+-- ============================================================
+-- Static helper for scripts that need to self-load the Loader
+-- from a raw source string (e.g. fetched via game:HttpGet).
+-- Avoids the unreliable loadstring return-value pattern by using
+-- the same temp-global strategy as compileAndRun internally.
+-- Usage:
+--   local src    = game:HttpGet("<url>/Loader.luau")
+--   local Loader = Loader.bootstrap(src)  -- wait, use the static form:
+--
+--   local src    = game:HttpGet("<url>/Loader.luau")
+--   local Loader = (function()
+--       local key = "__MatchaLoaderBoot"
+--       local fn  = loadstring(key .. " = (function()\n" .. src .. "\nend)()")
+--       fn()
+--       local lib = _G[key]; _G[key] = nil
+--       return lib
+--   end)()
+--
+-- Or just call this static method after a first compileAndRun:
+function Loader.bootstrap(source)
+    assert(type(source) == "string" and #source > 0,
+        "Loader.bootstrap: source must be a non-empty string.")
+    return compileAndRun("Loader", source)
 end
 
 return Loader
