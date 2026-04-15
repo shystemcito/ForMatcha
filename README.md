@@ -72,7 +72,7 @@ end)
 ```
 
 ### TabService — create a managed tab with async loading
-
+(Do not use this shit, need fixs)
 ```lua
 local TabService = Loader.load("TabService")
 
