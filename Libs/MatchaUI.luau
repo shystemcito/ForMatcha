@@ -1,15 +1,17 @@
 -- @env: Matcha LuaVM
 -- @module: MatchaUI
--- @version: 2.0.0
--- @description: Comprehensive Drawing-based UI library for the Matcha external executor.
---               FIXED: drag hitbox desync, missing background, broken tab system,
---               duplicate Window constructor, element offset tracking.
+-- @version: 3.0.0
+-- @description: Drawing-based UI library for the Matcha external executor.
+--               v3 fixes: visible background, ASCII-only chars, keybind listener,
+--               full drag sync for all sub-elements, English-only strings.
+
+print("[MatchaUI] v3.0.0 loaded.")
 
 -- ============================================================
 --  SAFETY GUARD
 -- ============================================================
-local executor = identifyexecutor()
-if executor ~= "Matcha" then
+local _exec = identifyexecutor()
+if _exec ~= "Matcha" then
     error("[MatchaUI] This library requires the Matcha executor.")
 end
 
@@ -19,34 +21,29 @@ end
 local MatchaUI = {}
 
 -- ============================================================
---  THEME (Dark, fully centralised)
+--  THEME
 -- ============================================================
 local Theme = {
-    -- Window
     WindowBg        = Color3.fromRGB(18,  18,  24),
     TitleBarBg      = Color3.fromRGB(28,  28,  38),
     TitleText       = Color3.fromRGB(220, 220, 235),
     Border          = Color3.fromRGB(55,  55,  75),
     BorderAccent    = Color3.fromRGB(90,  90, 130),
 
-    -- Controls
     ControlBg       = Color3.fromRGB(30,  30,  42),
     ControlHover    = Color3.fromRGB(42,  42,  58),
     ControlActive   = Color3.fromRGB(55,  55,  80),
     ControlText     = Color3.fromRGB(200, 200, 215),
     Placeholder     = Color3.fromRGB(100, 100, 120),
 
-    -- Accent
     Accent          = Color3.fromRGB(100, 100, 220),
     AccentDim       = Color3.fromRGB(65,  65, 145),
     AccentText      = Color3.fromRGB(255, 255, 255),
 
-    -- States
     Success         = Color3.fromRGB( 80, 200, 120),
     Danger          = Color3.fromRGB(220,  80,  80),
     Warning         = Color3.fromRGB(220, 180,  60),
 
-    -- Misc
     Slider          = Color3.fromRGB(100, 100, 220),
     SliderTrack     = Color3.fromRGB(40,  40,  55),
     CheckMark       = Color3.fromRGB(100, 220, 150),
@@ -57,13 +54,11 @@ local Theme = {
     TabInactive     = Color3.fromRGB(35,  35,  50),
     TabText         = Color3.fromRGB(190, 190, 210),
 
-    -- Typography
     FontUI          = Drawing.Fonts.UI,
     FontMono        = Drawing.Fonts.Monospace,
     FontSize        = 14,
     TitleSize       = 15,
 
-    -- Layout
     Padding         = 6,
     ElementHeight   = 22,
     TitleHeight     = 26,
@@ -84,7 +79,6 @@ local function GetMousePos()
     return Mouse.X, Mouse.Y
 end
 
--- Test whether (mx,my) is inside a rect defined by (x,y,w,h).
 local function PointInRect(mx, my, x, y, w, h)
     return mx >= x and mx <= x + w and my >= y and my <= y + h
 end
@@ -116,6 +110,13 @@ local function MakeText(text, x, y, size, color, zindex, outline, center, font)
     return t
 end
 
+-- Move a list of Drawing objects by (dx, dy)
+local function ShiftObjects(objs, dx, dy)
+    for _, obj in ipairs(objs) do
+        obj.Position = Vector2.new(obj.Position.X + dx, obj.Position.Y + dy)
+    end
+end
+
 -- ============================================================
 --  OBJECT REGISTRY (global cleanup list)
 -- ============================================================
@@ -136,16 +137,6 @@ end
 -- ============================================================
 --  WINDOW
 -- ============================================================
---[[
-  FIX: Elements store their offsets relative to the window origin.
-       All hitbox checks compute abs position from win.X + offsetX at
-       runtime so they stay correct after any drag move.
-  FIX: Single authoritative constructor (NewWindow). The broken
-       MatchaUI.Window metatable trick is removed.
-  FIX: Background Square now covers the full window height and is
-       updated by _RefreshSize whenever content grows.
---]]
-
 local Window = {}
 Window.__index = Window
 
@@ -157,41 +148,39 @@ function MatchaUI.NewWindow(cfg)
     self.Width          = cfg.Width  or 280
     self.ZIndex         = cfg.ZIndex or Theme.ZBase
     self.Minimized      = false
-    self._elements      = {}   -- { el, offX, offY } tables
-    self._cursor        = 0    -- Y offset for next element (relative to content top)
+    self._elements      = {}
+    self._cursor        = 0
     self._contentH      = 0
     self._dragging      = false
     self._dragOffX      = 0
     self._dragOffY      = 0
 
-    local z = self.ZIndex
-    local W = self.Width
+    local z  = self.ZIndex
+    local W  = self.Width
     local TH = Theme.TitleHeight
 
-    -- Full-window background (resizes with content)
+    -- Full window background — starts at TH height, grows with content
     self._bg         = Track(MakeSquare(self.X, self.Y, W, TH, Theme.WindowBg, z, true, Theme.CornerRadius))
     -- Title bar
     self._titleBar   = Track(MakeSquare(self.X, self.Y, W, TH, Theme.TitleBarBg, z + 1, true, Theme.CornerRadius))
     -- Title text
-    self._titleText  = Track(MakeText(self.Title, self.X + Theme.Padding, self.Y + 5, Theme.TitleSize, Theme.TitleText, z + 2))
+    self._titleText  = Track(MakeText(self.Title, self.X + Theme.Padding, self.Y + 6, Theme.TitleSize, Theme.TitleText, z + 2))
     -- Outer border
     self._border     = Track(MakeSquare(self.X, self.Y, W, TH, Theme.Border, z + 1, false, Theme.CornerRadius))
-
-    -- Minimize button
+    -- Minimize button  (ASCII: "-" instead of "_")
     self._minBtn     = Track(MakeSquare(self.X + W - 22, self.Y + 5, 16, 16, Theme.ControlBg, z + 2, true, 2))
-    self._minTxt     = Track(MakeText("_", self.X + W - 15, self.Y + 5, 13, Theme.ControlText, z + 3))
-
-    -- Content background (below title bar)
+    self._minTxt     = Track(MakeText("-", self.X + W - 15, self.Y + 5, 13, Theme.ControlText, z + 3, false, true))
+    -- Content panel (below title bar)
     self._contentBg  = Track(MakeSquare(self.X, self.Y + TH, W, 0, Theme.WindowBg, z, true, 0))
     self._contentBorder = Track(MakeSquare(self.X, self.Y + TH, W, 0, Theme.Border, z + 1, false, 0))
 
-    -- ---- Input polling loop ----
+    -- Input polling loop
     task.spawn(function()
         while self._bg and self._bg.Visible do
             local mx, my = GetMousePos()
             local mb     = ismouse1pressed()
 
-            -- Minimize button hitbox (computed from current self.X/Y)
+            -- Minimize button
             local mbX = self.X + self.Width - 22
             local mbY = self.Y + 5
             if mb and PointInRect(mx, my, mbX, mbY, 16, 16) then
@@ -200,7 +189,7 @@ function MatchaUI.NewWindow(cfg)
                 task.wait(0.2)
             end
 
-            -- Drag title bar (excluding minimize button zone)
+            -- Drag (excludes minimize button zone)
             if mb and PointInRect(mx, my, self.X, self.Y, self.Width - 24, TH) then
                 if not self._dragging then
                     self._dragging = true
@@ -222,36 +211,29 @@ function MatchaUI.NewWindow(cfg)
     return self
 end
 
--- Keep backward compat alias
 MatchaUI.Window = MatchaUI.NewWindow
 
--- Move all drawing objects by delta, update self.X/Y.
 function Window:_MoveTo(nx, ny)
     local dx = nx - self.X
     local dy = ny - self.Y
     self.X   = nx
     self.Y   = ny
 
-    local roots = {self._bg, self._titleBar, self._border, self._contentBg, self._contentBorder}
-    for _, obj in ipairs(roots) do
-        obj.Position = Vector2.new(obj.Position.X + dx, obj.Position.Y + dy)
-    end
-    self._titleText.Position = Vector2.new(self._titleText.Position.X + dx, self._titleText.Position.Y + dy)
-    self._minBtn.Position    = Vector2.new(self._minBtn.Position.X + dx, self._minBtn.Position.Y + dy)
-    self._minTxt.Position    = Vector2.new(self._minTxt.Position.X + dx, self._minTxt.Position.Y + dy)
+    -- Move all root drawing objects
+    ShiftObjects({
+        self._bg, self._titleBar, self._border,
+        self._contentBg, self._contentBorder,
+        self._titleText, self._minBtn, self._minTxt,
+    }, dx, dy)
 
-    -- Move each element's drawing objects
-    -- FIX: also update the stored absolute positions so hitboxes stay correct.
+    -- Move each registered element
     for _, entry in ipairs(self._elements) do
         local el = entry.el
         entry.absX = entry.absX + dx
         entry.absY = entry.absY + dy
         if el._drawObjects then
-            for _, d in ipairs(el._drawObjects) do
-                d.Position = Vector2.new(d.Position.X + dx, d.Position.Y + dy)
-            end
+            ShiftObjects(el._drawObjects, dx, dy)
         end
-        -- Notify element it moved so it can update its own cached abs coords
         if el._onMove then
             pcall(el._onMove, el, dx, dy)
         end
@@ -264,34 +246,33 @@ function Window:ToggleMinimize()
     self._contentBg.Visible     = show
     self._contentBorder.Visible = show
     for _, entry in ipairs(self._elements) do
-        -- Tabs manage their own tab-group visibility on switch,
-        -- but we still respect minimise for the tab bar itself.
         entry.el:SetVisible(show)
     end
-    self._minTxt.Text = self.Minimized and "+" or "_"
+    -- ASCII: "+" when minimized, "-" when open
+    self._minTxt.Text = self.Minimized and "+" or "-"
     self:_RefreshSize()
 end
 
 function Window:_RefreshSize()
     local TH = Theme.TitleHeight
     if self.Minimized then
-        self._bg.Size           = Vector2.new(self.Width, TH)
-        self._titleBar.Size     = Vector2.new(self.Width, TH)
-        self._border.Size       = Vector2.new(self.Width, TH)
-        self._contentBg.Size    = Vector2.new(self.Width, 0)
-        self._contentBorder.Size= Vector2.new(self.Width, 0)
+        self._bg.Size            = Vector2.new(self.Width, TH)
+        self._titleBar.Size      = Vector2.new(self.Width, TH)
+        self._border.Size        = Vector2.new(self.Width, TH)
+        self._contentBg.Size     = Vector2.new(self.Width, 0)
+        self._contentBorder.Size = Vector2.new(self.Width, 0)
     else
-        local bodyH = self._contentH + Theme.Padding
+        local bodyH  = self._contentH + Theme.Padding
         local totalH = TH + bodyH
-        self._bg.Size           = Vector2.new(self.Width, totalH)
-        self._titleBar.Size     = Vector2.new(self.Width, TH)
-        self._border.Size       = Vector2.new(self.Width, totalH)
-        self._contentBg.Size    = Vector2.new(self.Width, bodyH)
-        self._contentBorder.Size= Vector2.new(self.Width, bodyH)
+        -- _bg covers the entire window including title bar
+        self._bg.Size            = Vector2.new(self.Width, totalH)
+        self._titleBar.Size      = Vector2.new(self.Width, TH)
+        self._border.Size        = Vector2.new(self.Width, totalH)
+        self._contentBg.Size     = Vector2.new(self.Width, bodyH)
+        self._contentBorder.Size = Vector2.new(self.Width, bodyH)
     end
 end
 
--- Returns the absolute Y where the next element should start.
 function Window:_NextY()
     return self.Y + Theme.TitleHeight + Theme.Padding + self._cursor
 end
@@ -302,7 +283,6 @@ function Window:_Advance(h)
     self:_RefreshSize()
 end
 
--- FIX: Register stores both element and its snapshot abs origin so _MoveTo can update it.
 function Window:_Register(el, absX, absY)
     table.insert(self._elements, { el = el, absX = absX or 0, absY = absY or 0 })
 end
@@ -311,9 +291,9 @@ end
 --  SECTION
 -- ============================================================
 function Window:Section(label)
-    local x  = self.X + Theme.Padding
-    local y  = self:_NextY()
-    local w  = self.Width - Theme.Padding * 2
+    local x = self.X + Theme.Padding
+    local y = self:_NextY()
+    local w = self.Width - Theme.Padding * 2
 
     local line = Track(MakeSquare(x, y + 8, w, 1, Theme.BorderAccent, self.ZIndex + 1))
     local txt  = Track(MakeText(label, x + 4, y, Theme.FontSize - 1, Theme.BorderAccent, self.ZIndex + 2))
@@ -333,12 +313,6 @@ end
 -- ============================================================
 --  BUTTON
 -- ============================================================
---[[
-  FIX: hitbox is computed at runtime using self.X/self.Y + stored offsets
-       so it never drifts after a window drag.
-  Pattern used throughout: local offX, offY store the element's offset
-  relative to the window's X,Y. The loop reads self.X+offX every tick.
---]]
 function Window:Button(cfg)
     local label   = cfg.Label   or "Button"
     local onClick = cfg.OnClick or function() end
@@ -356,23 +330,21 @@ function Window:Button(cfg)
     local brd = Track(MakeSquare(ax, ay, w, h, Theme.Border, z, false, 3))
 
     local el = { _drawObjects = {bg, txt, brd} }
-    el.SetVisible = function(_, v)
-        bg.Visible = v; txt.Visible = v; brd.Visible = v
-    end
-    -- Called by _MoveTo to update cached absolute coords
     el._absX = ax; el._absY = ay
     el._onMove = function(_, dx, dy)
         el._absX = el._absX + dx
         el._absY = el._absY + dy
+    end
+    el.SetVisible = function(_, v)
+        bg.Visible = v; txt.Visible = v; brd.Visible = v
     end
 
     task.spawn(function()
         local clicked = false
         while bg.Visible ~= nil do
             local mx, my = GetMousePos()
-            local ax_, ay_ = el._absX, el._absY
-            local hover = PointInRect(mx, my, ax_, ay_, w, h)
-            local mb    = ismouse1pressed()
+            local hover  = PointInRect(mx, my, el._absX, el._absY, w, h)
+            local mb     = ismouse1pressed()
 
             bg.Color  = hover and (mb and Theme.ControlActive or Theme.ControlHover) or Theme.ControlBg
             brd.Color = hover and Theme.Accent or Theme.Border
@@ -417,8 +389,9 @@ function Window:Toggle(cfg)
 
     local el = { _drawObjects = {bg, pill, knob, txt, brd}, Value = state }
     el._absX = ax; el._absY = ay
-    el._onMove = function(_, dx, dy) el._absX = el._absX + dx; el._absY = el._absY + dy end
-
+    el._onMove = function(_, dx, dy)
+        el._absX = el._absX + dx; el._absY = el._absY + dy
+    end
     el.SetVisible = function(_, v)
         for _, d in ipairs(el._drawObjects) do d.Visible = v end
     end
@@ -469,7 +442,7 @@ function Window:Slider(cfg)
     local z    = self.ZIndex + 1
 
     local ax, ay = self.X + offX, self.Y + offY
-    local trackY = ay + h - 7
+    local trackY  = ay + h - 7
 
     local bg     = Track(MakeSquare(ax, ay, w, h, Theme.ControlBg, z, true, 3))
     local track  = Track(MakeSquare(ax + 4, trackY, w - 8, 4, Theme.SliderTrack, z + 1, true, 2))
@@ -488,7 +461,6 @@ function Window:Slider(cfg)
         local t   = (v - minVal) / (maxVal - minVal)
         local fw  = math.floor((w - 8) * t)
         fill.Size = Vector2.new(math.max(fw, 1), 4)
-        -- knob X is relative to the track start which is at el._absX+4
         knob.Position = Vector2.new(el._absX + 4 + fw - 4, knob.Position.Y)
         valTxt.Text   = string.format("%." .. decimals .. "f", v)
         value = v; el.Value = v
@@ -535,6 +507,8 @@ end
 
 -- ============================================================
 --  DROPDOWN
+--  FIX: option rows are stored as absolute objects and are shifted
+--       via _onMove when the window drags.
 -- ============================================================
 function Window:Dropdown(cfg)
     local label    = cfg.Label    or "Dropdown"
@@ -553,6 +527,7 @@ function Window:Dropdown(cfg)
     local bg      = Track(MakeSquare(ax, ay, w, h, Theme.ControlBg, z, true, 3))
     local brd     = Track(MakeSquare(ax, ay, w, h, Theme.Border, z, false, 3))
     local selTxt  = Track(MakeText(options[selIdx] or "---", ax + Theme.Padding, ay + 4, Theme.FontSize, Theme.ControlText, z + 1))
+    -- ASCII arrow: "v" / "^"
     local arrowTxt= Track(MakeText("v", ax + w - 14, ay + 4, Theme.FontSize, Theme.Placeholder, z + 1))
 
     local isOpen = false
@@ -563,9 +538,10 @@ function Window:Dropdown(cfg)
         local ot  = Track(MakeText(opt, ax + Theme.Padding, oy + 4, Theme.FontSize, Theme.ControlText, z + 6))
         local obl = Track(MakeSquare(ax, oy, w, h, Theme.Border, z + 5, false, 0))
         ob.Visible = false; ot.Visible = false; obl.Visible = false
-        table.insert(optBgs, {bg = ob, txt = ot, brd = obl})
+        table.insert(optBgs, {bg = ob, txt = ot, brd = obl, offsetY = h * i})
     end
 
+    -- Collect all option draw objects for the _drawObjects list
     local el = { _drawObjects = {bg, brd, selTxt, arrowTxt}, Value = options[selIdx], Index = selIdx }
     for _, ob in ipairs(optBgs) do
         table.insert(el._drawObjects, ob.bg)
@@ -574,6 +550,8 @@ function Window:Dropdown(cfg)
     end
 
     el._absX = ax; el._absY = ay
+    -- FIX: _onMove updates _absX/_absY so option hit-tests stay correct.
+    -- The Drawing objects are already shifted by the global ShiftObjects in _MoveTo.
     el._onMove = function(_, dx, dy)
         el._absX = el._absX + dx; el._absY = el._absY + dy
     end
@@ -614,6 +592,7 @@ function Window:Dropdown(cfg)
 
             if isOpen then
                 for i, ob in ipairs(optBgs) do
+                    -- Compute option row Y from current element abs position
                     local oy  = ay_ + h * i
                     local hov = PointInRect(mx, my, ax_, oy, w, h)
                     ob.bg.Color = hov and Theme.ControlHover or Theme.ControlBg
@@ -666,7 +645,6 @@ function Window:TextInput(cfg)
     el._onMove = function(_, dx, dy)
         el._absX = el._absX + dx; el._absY = el._absY + dy
     end
-
     el.SetVisible = function(_, v)
         bg.Visible = v; brd.Visible = v; txt.Visible = v
         if not v then cursor.Visible = false end
@@ -726,7 +704,7 @@ function Window:TextInput(cfg)
                     cursor.Position = Vector2.new(el._absX + Theme.Padding + tw, el._absY + 4)
                 end
 
-                local shift = iskeypressed(0x10)
+                local shift = iskeypressed(0x10) or iskeypressed(0xA0) or iskeypressed(0xA1)
                 if iskeypressed(0x08) then
                     if heldKey ~= 0x08 then
                         heldKey = 0x08; heldTimer = 0
@@ -791,7 +769,8 @@ function Window:Checkbox(cfg)
     local bg    = Track(MakeSquare(ax, ay, w, h, Theme.ControlBg, z, true, 3))
     local box   = Track(MakeSquare(bx, by, bs, bs, Theme.ControlBg, z + 1, true, 2))
     local boxBrd= Track(MakeSquare(bx, by, bs, bs, Theme.Border, z + 1, false, 2))
-    local check = Track(MakeText("✓", bx + 2, by, bs - 2, Theme.CheckMark, z + 2))
+    -- ASCII checkmark: "x" instead of Unicode checkmark
+    local check = Track(MakeText("x", bx + 2, by, bs - 2, Theme.CheckMark, z + 2, false))
     check.Visible = state
     local txt   = Track(MakeText(label, bx + bs + 6, ay + 4, Theme.FontSize, Theme.ControlText, z + 1))
 
@@ -800,7 +779,6 @@ function Window:Checkbox(cfg)
     el._onMove = function(_, dx, dy)
         el._absX = el._absX + dx; el._absY = el._absY + dy
     end
-
     el.SetVisible = function(_, v)
         bg.Visible = v; box.Visible = v; boxBrd.Visible = v; txt.Visible = v
         check.Visible = v and state
@@ -872,6 +850,7 @@ end
 
 -- ============================================================
 --  COLOR PICKER
+--  FIX: expanded slider rows now move properly with the window.
 -- ============================================================
 function Window:ColorPicker(cfg)
     local label    = cfg.Label    or "Color"
@@ -912,9 +891,13 @@ function Window:ColorPicker(cfg)
 
     local h_, s_, v_ = RGBtoHSV(color)
     local trackW = w - 8
-    local labels = {"H","S","V"}
-    local vals   = {h_, s_, v_}
+    local chLabels = {"H","S","V"}
+    local vals     = {h_, s_, v_}
     local tracks = {}; local fills = {}; local knobs = {}; local valTxts = {}
+    local rowLbls = {}
+    -- Store row base Y offsets (relative to picker panel top = ay+h)
+    local rowBaseYs = {}
+
     local extraObjs = {pickerBg, pickerBrd}
 
     local function RebuildColor()
@@ -923,34 +906,17 @@ function Window:ColorPicker(cfg)
     end
 
     for i = 1, 3 do
-        local ry  = ay + h + Theme.Padding + (i-1) * (18 + Theme.Padding / 2)
-        local lbl = Track(MakeText(labels[i], ax + 4, ry + 2, 12, Theme.Placeholder, z + 5))
+        local ryOff = Theme.Padding + (i-1) * (18 + Theme.Padding / 2)
+        rowBaseYs[i] = ryOff
+        local ry  = ay + h + ryOff
+        local lbl = Track(MakeText(chLabels[i], ax + 4, ry + 2, 12, Theme.Placeholder, z + 5))
         local tr  = Track(MakeSquare(ax + 16, ry + 5, trackW - 16, 4, Theme.SliderTrack, z + 5, true, 2))
         local fw  = math.floor((trackW - 16) * vals[i])
         local fl  = Track(MakeSquare(ax + 16, ry + 5, math.max(fw,1), 4, Theme.Slider, z + 6, true, 2))
         local kn  = Track(MakeSquare(ax + 16 + fw - 4, ry + 2, 8, 10, Theme.Accent, z + 7, true, 3))
         local vt  = Track(MakeText(string.format("%.2f", vals[i]), ax + w - 30, ry + 2, 11, Theme.Placeholder, z + 5))
         for _, obj in ipairs({lbl,tr,fl,kn,vt}) do obj.Visible = false; table.insert(extraObjs, obj) end
-        tracks[i] = tr; fills[i] = fl; knobs[i] = kn; valTxts[i] = vt
-        local iCopy = i
-        task.spawn(function()
-            while bg.Visible ~= nil do
-                if expanded then
-                    local mx, my = GetMousePos()
-                    local mb     = ismouse1pressed()
-                    if mb and PointInRect(mx, my, ax+16, ry, trackW-16, 14) then
-                        local t = math.clamp((mx-(ax+16))/(trackW-16), 0, 1)
-                        vals[iCopy] = t
-                        local nfw = math.floor((trackW-16)*t)
-                        fl.Size = Vector2.new(math.max(nfw,1), 4)
-                        kn.Position = Vector2.new(ax+16+nfw-4, ry+2)
-                        vt.Text = string.format("%.2f", t)
-                        RebuildColor()
-                    end
-                end
-                task.wait(0.03)
-            end
-        end)
+        tracks[i] = tr; fills[i] = fl; knobs[i] = kn; valTxts[i] = vt; rowLbls[i] = lbl
     end
 
     local allDraw = {bg, lTxt, swatch, swatchB}
@@ -965,8 +931,36 @@ function Window:ColorPicker(cfg)
         bg.Visible = v; lTxt.Visible = v; swatch.Visible = v; swatchB.Visible = v
         if not v then
             expanded = false; pickerBg.Visible = false; pickerBrd.Visible = false
-            for i = 1,3 do tracks[i].Visible=false; fills[i].Visible=false; knobs[i].Visible=false; valTxts[i].Visible=false end
+            for i = 1,3 do
+                tracks[i].Visible=false; fills[i].Visible=false
+                knobs[i].Visible=false; valTxts[i].Visible=false
+                rowLbls[i].Visible=false
+            end
         end
+    end
+
+    -- Slider interaction threads (use el._absX/Y for hit-tests after drag)
+    for i = 1, 3 do
+        local iCopy = i
+        task.spawn(function()
+            while bg.Visible ~= nil do
+                if expanded then
+                    local mx, my = GetMousePos()
+                    local mb     = ismouse1pressed()
+                    local ry = el._absY + h + rowBaseYs[iCopy]
+                    if mb and PointInRect(mx, my, el._absX+16, ry, trackW-16, 14) then
+                        local t = math.clamp((mx-(el._absX+16))/(trackW-16), 0, 1)
+                        vals[iCopy] = t
+                        local nfw = math.floor((trackW-16)*t)
+                        fills[iCopy].Size = Vector2.new(math.max(nfw,1), 4)
+                        knobs[iCopy].Position = Vector2.new(el._absX+16+nfw-4, ry+2)
+                        valTxts[iCopy].Text = string.format("%.2f", t)
+                        RebuildColor()
+                    end
+                end
+                task.wait(0.03)
+            end
+        end)
     end
 
     task.spawn(function()
@@ -981,6 +975,7 @@ function Window:ColorPicker(cfg)
                 for i = 1,3 do
                     tracks[i].Visible = expanded; fills[i].Visible = expanded
                     knobs[i].Visible = expanded; valTxts[i].Visible = expanded
+                    rowLbls[i].Visible = expanded
                 end
             elseif not mb then clicked = false end
             task.wait(0.03)
@@ -994,6 +989,10 @@ end
 
 -- ============================================================
 --  KEYBIND
+--  FIX 1: Wait for mouse button release before scanning new key,
+--          so the click that entered listen mode is never captured.
+--  FIX 2: Added a `TriggerKey` function so external code can use
+--          the bound key via keypress/keyrelease.
 -- ============================================================
 function Window:Keybind(cfg)
     local label    = cfg.Label    or "Keybind"
@@ -1006,9 +1005,11 @@ function Window:Keybind(cfg)
         [0x70]="F1",[0x71]="F2",[0x72]="F3",[0x73]="F4",[0x74]="F5",
         [0x75]="F6",[0x76]="F7",[0x77]="F8",[0x78]="F9",[0x79]="F10",
         [0x7A]="F11",[0x7B]="F12",
+        [0xBD]="Minus",[0xBB]="Plus",[0xBC]="Comma",[0xBE]="Period",
     }
     for i = 0x41, 0x5A do VKNames[i] = string.char(i) end
     for i = 0x30, 0x39 do VKNames[i] = string.char(i) end
+    for i = 0x60, 0x69 do VKNames[i] = "Num" .. (i - 0x60) end
 
     local offX = Theme.Padding
     local offY = Theme.TitleHeight + Theme.Padding + self._cursor
@@ -1033,8 +1034,19 @@ function Window:Keybind(cfg)
         bg.Visible = v; brd.Visible = v; lTxt.Visible = v; kTxt.Visible = v
     end
 
+    -- TriggerKey: simulate press of the bound key inside Roblox
+    el.TriggerKey = function(_)
+        if isrbxactive() then
+            setrobloxinput(true)
+            keypress(vk)
+            task.wait(0.05)
+            keyrelease(vk)
+            setrobloxinput(false)
+        end
+    end
+
     task.spawn(function()
-        local clicked = false
+        local wasClicked = false
         while bg.Visible ~= nil do
             local mx, my = GetMousePos()
             local mb     = ismouse1pressed()
@@ -1042,18 +1054,30 @@ function Window:Keybind(cfg)
 
             bg.Color  = listening and Theme.ControlActive or (hover and Theme.ControlHover or Theme.ControlBg)
             brd.Color = listening and Theme.Accent or Theme.Border
-            kTxt.Text = listening and "[...]" or "[" .. (VKNames[vk] or "???") .. "]"
+            kTxt.Text = listening and "[...]" or "[" .. (VKNames[vk] or string.format("0x%X", vk)) .. "]"
 
-            if hover and mb and not clicked then clicked = true; listening = true
-            elseif not mb then clicked = false end
+            -- Enter listen mode on click
+            if hover and mb and not wasClicked then
+                wasClicked = true; listening = true
+            end
+            if not mb then wasClicked = false end
 
             if listening then
-                for code = 0x08, 0x7B do
-                    if iskeypressed(code) and code ~= 0x01 and code ~= 0x02 then
-                        vk = code; el.Value = vk
-                        el.Name = VKNames[vk] or string.format("0x%X", vk)
-                        listening = false; pcall(onChange, vk, el.Name)
-                        task.wait(0.15); break
+                -- Wait until mouse button is fully released before accepting a key
+                -- so the click that triggered listen mode is not captured as the bind.
+                if not mb then
+                    for code = 0x08, 0x7B do
+                        -- Skip mouse buttons (0x01, 0x02, 0x04) and ignored codes
+                        if code ~= 0x01 and code ~= 0x02 and code ~= 0x04 then
+                            if iskeypressed(code) then
+                                vk = code; el.Value = vk
+                                el.Name = VKNames[vk] or string.format("0x%X", vk)
+                                listening = false
+                                pcall(onChange, vk, el.Name)
+                                task.wait(0.15)
+                                break
+                            end
+                        end
                     end
                 end
             end
@@ -1071,22 +1095,22 @@ end
 -- ============================================================
 function Window:SearchBar(cfg)
     cfg = cfg or {}
+    -- ASCII search icon: "[?]" prefix in placeholder instead of Unicode glyph
     cfg.Placeholder = cfg.Placeholder or "Search..."
     local onChangeCfg = cfg.OnChange or function() end
 
-    -- Snapshot cursor before TextInput advances it
     local iconOffX = Theme.Padding
     local iconOffY = Theme.TitleHeight + Theme.Padding + self._cursor
     local ax, ay   = self.X + iconOffX, self.Y + iconOffY
     local z        = self.ZIndex + 1
 
-    local icon = Track(MakeText("⌕", ax + 3, ay + 4, Theme.FontSize, Theme.Placeholder, z + 2))
+    -- "S>" is a readable ASCII stand-in for the search glyph
+    local icon = Track(MakeText("S>", ax + 3, ay + 4, Theme.FontSize - 2, Theme.Placeholder, z + 2, false))
 
     cfg.OnChange = onChangeCfg
     local el = self:TextInput(cfg)
     table.insert(el._drawObjects, icon)
 
-    -- Track the icon with the element so it moves with the window
     local origOnMove = el._onMove
     el._onMove = function(self_, dx, dy)
         if origOnMove then origOnMove(self_, dx, dy) end
@@ -1096,7 +1120,7 @@ function Window:SearchBar(cfg)
     -- Nudge text right to make room for icon
     local txtObj = el._drawObjects[3]
     if txtObj then
-        txtObj.Position = Vector2.new(txtObj.Position.X + 14, txtObj.Position.Y)
+        txtObj.Position = Vector2.new(txtObj.Position.X + 16, txtObj.Position.Y)
     end
 
     return el
@@ -1105,32 +1129,17 @@ end
 -- ============================================================
 --  TAB SYSTEM
 -- ============================================================
---[[
-  FIX: Tabs now properly show/hide elements that were added AFTER the tab
-       bar was created. Each call to tabs:Group(name) returns a group handle.
-       Elements added to a group are hidden unless that group's tab is active.
-
-  New API:
-    local tabs = win:Tabs({"General", "Visual", "Info"})
-    local grpGeneral = tabs:Group("General")
-    grpGeneral:Button({...})   -- same API as win:Button but scoped to the tab
-    tabs:OnTab("General", function() end)   -- still works as a callback
-
-  Legacy: tabs:OnTab(name, cb) still fires the callback on switch.
-  Legacy: elements added directly to win after Tabs() call are always visible.
---]]
 function Window:Tabs(tabNames)
-    local offX  = Theme.Padding
-    local offY  = Theme.TitleHeight + Theme.Padding + self._cursor
-    local w     = self.Width - Theme.Padding * 2
-    local h     = Theme.ElementHeight
-    local z     = self.ZIndex + 1
-    local tw    = math.floor(w / #tabNames)
+    local offX = Theme.Padding
+    local offY = Theme.TitleHeight + Theme.Padding + self._cursor
+    local w    = self.Width - Theme.Padding * 2
+    local h    = Theme.ElementHeight
+    local z    = self.ZIndex + 1
+    local tw   = math.floor(w / #tabNames)
 
     local ax, ay = self.X + offX, self.Y + offY
     local active  = 1
     local callbacks = {}
-    -- groups[i] = list of elements belonging to tab i
     local groups = {}
     for i = 1, #tabNames do groups[i] = {} end
 
@@ -1153,7 +1162,6 @@ function Window:Tabs(tabNames)
     end
     tabEl.SetVisible = function(_, v)
         for _, d in ipairs(allD) do d.Visible = v end
-        -- Also show/hide only the active group
         if v then
             for i, grp in ipairs(groups) do
                 local show = (i == active)
@@ -1172,7 +1180,6 @@ function Window:Tabs(tabNames)
             local isA = (i == idx)
             bgs[i].Color   = isA and Theme.TabActive  or Theme.TabInactive
             lines[i].Color = isA and Theme.Accent      or Theme.TabInactive
-            -- Show/hide each group's elements
             for _, ge in ipairs(groups[i]) do ge:SetVisible(isA) end
         end
         if callbacks[idx] then pcall(callbacks[idx]) end
@@ -1182,14 +1189,11 @@ function Window:Tabs(tabNames)
         for i, n in ipairs(tabNames) do
             if n == name then
                 callbacks[i] = cb
-                -- Fire immediately if this is the active tab
                 if i == active then pcall(cb) end
             end
         end
     end
 
-    -- Group(): creates a sub-window-like scope that adds elements to this window
-    -- but marks them as belonging to a tab group.
     tabEl.Group = function(_, name)
         local groupIdx = nil
         for i, n in ipairs(tabNames) do
@@ -1199,16 +1203,13 @@ function Window:Tabs(tabNames)
             error("[MatchaUI] Tab group '" .. tostring(name) .. "' not found.")
         end
 
-        -- A proxy that forwards element creation to the parent window
-        -- but intercepts _Register to also put the element into the group list.
-        local grp = {}
+        local grp    = {}
         local parent = self
 
-        local function wrapEl(el)
-            table.insert(groups[groupIdx], el)
-            -- Hide immediately if this group is not active
-            if groupIdx ~= active then el:SetVisible(false) end
-            return el
+        local function wrapEl(elem)
+            table.insert(groups[groupIdx], elem)
+            if groupIdx ~= active then elem:SetVisible(false) end
+            return elem
         end
 
         function grp:Section(label)  return wrapEl(parent:Section(label))  end
@@ -1273,7 +1274,7 @@ function Window:ScrollFrame(cfg)
     local bg  = Track(MakeSquare(ax, ay, w, visH, Theme.ControlBg, z, true, 3))
     local brd = Track(MakeSquare(ax, ay, w, visH, Theme.Border, z, false, 3))
 
-    local sbW = 5; local sbX = ax + w - sbW - 2
+    local sbW  = 5; local sbX = ax + w - sbW - 2
     local sbTr = Track(MakeSquare(sbX, ay + 2, sbW, visH - 4, Theme.SliderTrack, z + 1, true, 2))
     local sbH  = math.max(20, math.floor((visH / math.max(totalH, 1)) * (visH - 4)))
     local sbFl = Track(MakeSquare(sbX, ay + 2, sbW, sbH, Theme.ScrollBar, z + 2, true, 2))
@@ -1289,6 +1290,9 @@ function Window:ScrollFrame(cfg)
     local allD = {bg, brd, sbTr, sbFl}
     for _, t in ipairs(txtObjs) do table.insert(allD, t) end
 
+    local el = { _drawObjects = allD, Lines = lines }
+    el._absX = ax; el._absY = ay
+
     local function Refresh()
         local startLine = math.floor(scrollY / lineH) + 1
         for i, txtObj in ipairs(txtObjs) do
@@ -1298,21 +1302,17 @@ function Window:ScrollFrame(cfg)
             else
                 txtObj.Visible = false
             end
-            txtObj.Position = Vector2.new(ax + 4, ay + (i-1)*lineH - (scrollY % lineH))
+            txtObj.Position = Vector2.new(el._absX + 4, el._absY + (i-1)*lineH - (scrollY % lineH))
         end
         local t = maxScroll > 0 and scrollY / maxScroll or 0
-        sbFl.Position = Vector2.new(sbX, ay + 2 + math.floor(t * (visH - 4 - sbH)))
+        sbFl.Position = Vector2.new(sbX, el._absY + 2 + math.floor(t * (visH - 4 - sbH)))
     end
     Refresh()
 
-    local el = { _drawObjects = allD, Lines = lines }
-    el._absX = ax; el._absY = ay
     el._onMove = function(_, dx, dy)
         el._absX = el._absX + dx; el._absY = el._absY + dy
-        -- recompute scroll positions after move
         Refresh()
     end
-
     el.SetVisible = function(_, v)
         for _, d in ipairs(allD) do d.Visible = v end
     end
@@ -1362,6 +1362,7 @@ function Window:CloseButton(onClose)
     local ax, ay = self.X + offX, self.Y + offY
 
     local bg  = Track(MakeSquare(ax, ay, w, h, Theme.Danger, z, true, 3))
+    -- ASCII: "X  Close" (no Unicode)
     local txt = Track(MakeText("X  Close", ax + w/2, ay + 4, Theme.FontSize, Theme.AccentText, z + 1, true, true))
 
     local el = { _drawObjects = {bg, txt} }
@@ -1384,7 +1385,6 @@ function Window:CloseButton(onClose)
 
             if hover and mb and not clicked then
                 clicked = true
-                -- Hide all window drawing objects
                 for _, d in ipairs({self._bg, self._titleBar, self._titleText,
                                     self._border, self._minBtn, self._minTxt,
                                     self._contentBg, self._contentBorder}) do
@@ -1409,11 +1409,6 @@ end
 -- ============================================================
 --  TOOLTIP
 -- ============================================================
---[[
-  BoundX/Y/W/H are absolute screen coords for the hover trigger zone.
-  Since tooltips are positioned absolutely (not parented to a window),
-  the caller is responsible for providing correct coords after any drag.
---]]
 function MatchaUI.Tooltip(cfg)
     local text = cfg.Text   or "Tooltip"
     local bx   = cfg.BoundX or 0
@@ -1437,10 +1432,10 @@ function MatchaUI.Tooltip(cfg)
             local show = PointInRect(mx, my, bx, by, bw, bh)
             bg.Visible = show; brd.Visible = show; txt.Visible = show
             if show then
-                local tx = mx + 12; local ty = my + 16
-                bg.Position  = Vector2.new(tx, ty)
-                brd.Position = Vector2.new(tx, ty)
-                txt.Position = Vector2.new(tx + 6, ty + 3)
+                local tx_ = mx + 12; local ty_ = my + 16
+                bg.Position  = Vector2.new(tx_, ty_)
+                brd.Position = Vector2.new(tx_, ty_)
+                txt.Position = Vector2.new(tx_ + 6, ty_ + 3)
             end
             task.wait(0.04)
         end
@@ -1451,14 +1446,14 @@ function MatchaUI.Tooltip(cfg)
             alive = false
             bg:Remove(); brd:Remove(); txt:Remove()
         end,
-        SetBounds = function(_, x, y, w, h)
-            bx = x; by = y; bw = w; bh = h
+        SetBounds = function(_, x, y, w2, h2)
+            bx = x; by = y; bw = w2; bh = h2
         end,
     }
 end
 
 -- ============================================================
---  NOTIFICATION POP-UP
+--  NOTIFICATION
 -- ============================================================
 local _notifSlot = 0
 
