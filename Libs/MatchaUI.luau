@@ -1,3 +1,18 @@
+-- WIP - Everything is bad, really bad
+-- [[
+Our Claude, who art in Anthropic,
+Hallowed be thy Context Window.
+Thy vibecode come, thy logic be done,
+On the current chat as it was on the previous account.
+Give us this day our final two messages,
+And forgive us our account switching,
+As we forgive the paywall that limiteth our speed.
+Lead us not into the "Message limit reached" page,
+But deliver us from the Red Banner of Death.
+For thine is the reasoning, the Artifacts, and the Sonnet,
+Until the next 4-hour cooldown.
+Amen;
+]]
 -- @env: Matcha LuaVM
 -- MatchaUI.luau — Comprehensive UI Library for Matcha LuaVM
 -- Requires only the Drawing API. No tweens, no heavy animations.
