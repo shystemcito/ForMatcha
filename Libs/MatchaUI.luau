@@ -1779,68 +1779,66 @@ function MatchaUI:Step()
     -- == PER-WINDOW ==========================================================
     local tooltipElem = nil
     for _, win in ipairs(_state.windows) do
-        if not win._visible then goto continue_win end
-
-        -- Topbar drag initiation
-        if m1click and not _state.drag_window then
-            local tx = win.x
-            local ty = win.y
-            local tw = win.w - 48  -- exclude buttons area
-            if mouseInRect(mx,my, tx, ty, tw, TOPBAR_H) then
-                _state.drag_window = win
-                _state.drag_ox = mx - win.x
-                _state.drag_oy = my - win.y
+        -- Solo ejecutamos si la ventana es visible
+        if win._visible then 
+            
+            -- Topbar drag initiation
+            if m1click and not _state.drag_window then
+                local tx = win.x
+                local ty = win.y
+                local tw = win.w - 48
+                if mouseInRect(mx,my, tx, ty, tw, TOPBAR_H) then
+                    _state.drag_window = win
+                    _state.drag_ox = mx - win.x
+                    _state.drag_oy = my - win.y
+                end
             end
-        end
 
-        -- Minimize button
-        if m1click and mouseInRect(mx,my, win.x+win.w-44, win.y+5, 18, 18) then
-            win._minimized = not win._minimized
-            win:_setContentVisible(not win._minimized)
-        end
-
-        -- Close button
-        if m1click and mouseInRect(mx,my, win.x+win.w-23, win.y+5, 18, 18) then
-            win:_setVisible(false)
-        end
-
-        if win._minimized then goto continue_win end
-
-        -- Category tab clicks
-        for _,cat in ipairs(win._categories) do
-            local idx2 = cat._tab_idx
-            local tx2 = win.x + 4
-            local ty2 = win.y + TOPBAR_H + (idx2-1)*CAT_H + 4
-            if m1click and mouseInRect(mx,my, tx2, ty2, LEFTBAR_W-8, CAT_H-4) then
-                cat:_activate()
+            if m1click and mouseInRect(mx,my, win.x+win.w-44, win.y+5, 18, 18) then
+                win._minimized = not win._minimized
+                win:_setContentVisible(not win._minimized)
             end
-            -- reposition tab drawings on drag
-            cat._tab_bg.Position = Vector2.new(win.x+4, win.y+TOPBAR_H+(cat._tab_idx-1)*CAT_H+4)
-            cat._tab_t.Position  = Vector2.new(win.x+10, win.y+TOPBAR_H+(cat._tab_idx-1)*CAT_H+9)
-        end
 
-        -- Step all elements in active category
-        for _, cat in ipairs(win._categories) do
-            if cat._active then
-                for _, grp in ipairs(cat._groups) do
-                    for _, el in ipairs(grp._elements) do
-                        if el._step then
-                            el:_step(mx, my, m1now, m1click, m1release)
-                        end
-                        -- Tooltip detection
-                        if el._has_tooltip and el._bg then
-                            local p = el._bg.Position
-                            local s = el._bg.Size
-                            if mouseInRect(mx,my,p.X,p.Y,s.X,s.Y) then
-                                tooltipElem = el
+            if m1click and mouseInRect(mx,my, win.x+win.w-23, win.y+5, 18, 18) then
+                win:_setVisible(false)
+            end
+
+            if not win._minimized then 
+                
+                -- Category tab clicks
+                for _, cat in ipairs(win._categories) do
+                    local idx2 = cat._tab_idx
+                    local tx2 = win.x + 4
+                    local ty2 = win.y + TOPBAR_H + (idx2-1)*CAT_H + 4
+                    if m1click and mouseInRect(mx,my, tx2, ty2, LEFTBAR_W-8, CAT_H-4) then
+                        cat:_activate()
+                    end
+                    cat._tab_bg.Position = Vector2.new(win.x+4, win.y+TOPBAR_H+(cat._tab_idx-1)*CAT_H+4)
+                    cat._tab_t.Position  = Vector2.new(win.x+10, win.y+TOPBAR_H+(cat._tab_idx-1)*CAT_H+9)
+                end
+
+                -- Step all elements in active category
+                for _, cat in ipairs(win._categories) do
+                    if cat._active then
+                        for _, grp in ipairs(cat._groups) do
+                            for _, el in ipairs(grp._elements) do
+                                if el._step then
+                                    el:_step(mx, my, m1now, m1click, m1release)
+                                end
+                                -- Tooltip detection
+                                if el._has_tooltip and el._bg then
+                                    local p = el._bg.Position
+                                    local s = el._bg.Size
+                                    if mouseInRect(mx,my,p.X,p.Y,s.X,s.Y) then
+                                        tooltipElem = el
+                                    end
+                                end
                             end
                         end
                     end
                 end
             end
         end
-
-        ::continue_win::
     end
 
     -- == TOOLTIP =============================================================
