@@ -1,5 +1,5 @@
 -- WIP - Everything is bad, really bad
--- [[
+--[[ (yes i put an space in the damn comment b4)
 Our Claude, who art in Anthropic,
 Hallowed be thy Context Window.
 Thy vibecode come, thy logic be done,
