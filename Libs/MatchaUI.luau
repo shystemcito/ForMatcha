@@ -19,8 +19,8 @@ Amen;
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Running a fixed (i hope) version of the last version, ty shystemcito for fixing claude acc2 stack overflow")
-print("This will crash anyway...")
+print("Fixed version of the version I fixed of claude acc2 when he tried to fix claude acc1 account. By Claude Acc3")
+
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -153,6 +153,32 @@ local MouseVKCodes = {
     [6]=true,   -- VK_XBUTTON2
 }
 
+-- Explicit allowlist of VK codes that are valid keybind targets.
+-- Only keyboard keys with readable names are accepted; mouse buttons and
+-- unmappable codes (3, 7, 0xA–0x0F, etc.) are silently skipped.
+local VALID_KEYBIND_KEYS = {
+    -- Special
+    [8]=true,  [9]=true,  [13]=true, [16]=true, [17]=true,
+    [18]=true, [20]=true, [27]=true, [32]=true,
+    [33]=true, [34]=true, [35]=true, [36]=true,
+    [37]=true, [38]=true, [39]=true, [40]=true,
+    [45]=true, [46]=true,
+    -- Digits 0–9
+    [48]=true,[49]=true,[50]=true,[51]=true,[52]=true,
+    [53]=true,[54]=true,[55]=true,[56]=true,[57]=true,
+    -- Letters A–Z
+    [65]=true,[66]=true,[67]=true,[68]=true,[69]=true,
+    [70]=true,[71]=true,[72]=true,[73]=true,[74]=true,
+    [75]=true,[76]=true,[77]=true,[78]=true,[79]=true,
+    [80]=true,[81]=true,[82]=true,[83]=true,[84]=true,
+    [85]=true,[86]=true,[87]=true,[88]=true,[89]=true,
+    [90]=true,
+    -- F1–F12
+    [112]=true,[113]=true,[114]=true,[115]=true,[116]=true,
+    [117]=true,[118]=true,[119]=true,[120]=true,[121]=true,
+    [122]=true,[123]=true,
+}
+
 -- ─────────────────────────────────────────────────────────────
 -- WINDOW CONSTRUCTOR
 -- ─────────────────────────────────────────────────────────────
@@ -258,6 +284,8 @@ function MatchaUI.CreateWindow(opts)
             -- Slider track
             if elem._trackX then elem._trackX = elem._trackX + dx end
             if elem._trackY then elem._trackY = elem._trackY + dy end
+            -- ValueLabel stable anchor
+            if elem._valRightEdge then elem._valRightEdge = elem._valRightEdge + dx end
             -- Dropdown items
             if elem._itemObjs then
                 for _, item in ipairs(elem._itemObjs) do
@@ -290,11 +318,15 @@ function MatchaUI.CreateWindow(opts)
         for _, d in ipairs(win._draws) do
             pcall(function() d.Visible = state end)
         end
-        -- also hide/show active category content
-        if win.ActiveCat then
-            for _, elem in ipairs(win.ActiveCat._elemObjs) do
+        -- Bug fix #4: when becoming visible, show ONLY the active category's
+        -- elements.  All other categories must stay hidden.  Previously the
+        -- code skipped non-active categories entirely, so their elements were
+        -- never touched and remained visible from before the hide.
+        for _, cat in ipairs(win.Categories) do
+            local showCat = state and (win.ActiveCat == cat)
+            for _, elem in ipairs(cat._elemObjs) do
                 for _, obj in ipairs(elem) do
-                    pcall(function() obj.Visible = state end)
+                    pcall(function() obj.Visible = showCat end)
                 end
             end
         end
@@ -409,7 +441,7 @@ function MatchaUI.CreateWindow(opts)
     -- Helper: register an element descriptor and tag it with its category
     local function registerElemDesc(cat, elem)
         elem._cat = cat
-        table.insert(win._elements, elem)  -- stupid claude acc2 did stack overflow
+        table.insert(win._elements, elem)
         return elem
     end
 
@@ -732,10 +764,12 @@ function MatchaUI.CreateWindow(opts)
         -- Reserve 100px on right for the value. A cover rect with same bg color hides overflow.
         local valW   = 100
         local valX   = cx + cw - valW - 6  -- left edge of value area
+        -- Bug fix #3: stable right edge anchor computed once from layout constants.
+        -- SetValue always positions text relative to this fixed point so it never drifts.
+        local valRightEdge = cx + cw - 8
         local valCover = draw(makeRect(cx + cw - valW - 6, cy + 1, valW + 2, ELEM_H - 2, Theme.ElementBg, baseZ+6, true))
-        -- Anchor text at the right edge of the value area; ~7px per char estimate
         local initStr = tostring(defaultValue or "")
-        local initX   = cx + cw - 8 - math.max(0, #initStr * 7 - valW)
+        local initX   = valRightEdge - math.min(#initStr * 7, valW)
         local valTxt  = draw(makeText(initStr, initX, cy + ELEM_H/2 - 7, 13, Theme.AccentOn, baseZ+7, false, true))
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, valCover) table.insert(objs, valTxt)
         registerElem(cat, objs, ELEM_H)
@@ -743,17 +777,18 @@ function MatchaUI.CreateWindow(opts)
             Type="ValueLabel", _bg=bg, _draws=objs,
             _x=cx, _y=cy, _w=cw, _h=ELEM_H,
             _valTxt=valTxt, _valCover=valCover, _valW=valW,
+            _valRightEdge=valRightEdge,  -- stable anchor, never changes
             _labelTxt=lbl,
             Value=defaultValue or "",
             SetValue=function(self, v)
                 self.Value = v
                 local s = tostring(v)
                 self._valTxt.Text = s
-                -- Re-anchor so text ends at right edge, never overflowing
-                local estimatedW = #s * 7
-                local rightEdgeX = self._valTxt.Position.X + self._valW + 6
+                -- Always anchor from the fixed right edge, not the current
+                -- text X (which was the source of the rightward drift bug).
+                local estimatedW = math.min(#s * 7, self._valW)
                 self._valTxt.Position = Vector2.new(
-                    rightEdgeX - math.min(estimatedW, self._valW),
+                    self._valRightEdge - estimatedW,
                     self._valTxt.Position.Y
                 )
             end,
@@ -1025,7 +1060,20 @@ function MatchaUI.Run()
             for _, tip in ipairs(_tooltips) do
                 local e = tip._elem
                 if e and e._x then
-                    local hover = inBounds(mPos.X, mPos.Y, e._x, e._y, e._w, e._h)
+                    -- Bug fix #1: only show tooltip when the element's category is
+                    -- the active one in its window AND the window itself is visible.
+                    local catActive = false
+                    if e._cat then
+                        for _, w in ipairs(_windows) do
+                            if w.Visible and not w.Minimized and w.ActiveCat == e._cat then
+                                catActive = true
+                                break
+                            end
+                        end
+                    else
+                        catActive = true  -- tooltips not attached to a category (e.g. standalone)
+                    end
+                    local hover = catActive and inBounds(mPos.X, mPos.Y, e._x, e._y, e._w, e._h)
                     tip._bg.Visible  = hover
                     tip._txt.Visible = hover
                     if hover then
@@ -1181,8 +1229,10 @@ function MatchaUI.Run()
                             elem.Listening = true
                         end
                         if elem.Listening then
-                            for k = 1, 255 do
-                                if MouseVKCodes[k] then continue end
+                            -- Bug fix #2: iterate only over explicitly allowed keyboard VK codes.
+                            -- This prevents mouse button releases (VK 1/2/4/5/6) and any other
+                            -- unmappable codes from ever being registered as a keybind.
+                            for k, _ in pairs(VALID_KEYBIND_KEYS) do
                                 if iskeypressed(k) then
                                     elem.Key       = k
                                     elem.Listening  = false
