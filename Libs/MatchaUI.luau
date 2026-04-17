@@ -19,7 +19,8 @@ Amen;
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Running a fixed (i hope) version of the last version, ty claude acc2 for fixing claude acc1 code")
+print("Running a fixed (i hope) version of the last version, ty shystemcito for fixing claude acc2 stack overflow")
+print("This will crash anyway...")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -408,7 +409,7 @@ function MatchaUI.CreateWindow(opts)
     -- Helper: register an element descriptor and tag it with its category
     local function registerElemDesc(cat, elem)
         elem._cat = cat
-        registerElemDesc(cat, elem)
+        table.insert(win._elements, elem)  -- stupid claude acc2 did stack overflow
         return elem
     end
 
