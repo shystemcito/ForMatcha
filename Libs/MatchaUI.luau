@@ -19,9 +19,10 @@ Amen;
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
+print("Running a fixed (i hope) version of the last version, ty claude acc2 for fixing claude acc1 code")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
-print("Running the V1.0.0 (again, scratch, please claude work this time)")
+
 -- ─────────────────────────────────────────────────────────────
 -- THEME
 -- ─────────────────────────────────────────────────────────────
@@ -142,6 +143,15 @@ local KeyNames = {
     [122]="F11",[123]="F12",
 }
 
+-- Mouse VK codes to exclude from keybind detection
+local MouseVKCodes = {
+    [1]=true,   -- VK_LBUTTON
+    [2]=true,   -- VK_RBUTTON
+    [4]=true,   -- VK_MBUTTON
+    [5]=true,   -- VK_XBUTTON1
+    [6]=true,   -- VK_XBUTTON2
+}
+
 -- ─────────────────────────────────────────────────────────────
 -- WINDOW CONSTRUCTOR
 -- ─────────────────────────────────────────────────────────────
@@ -234,6 +244,38 @@ function MatchaUI.CreateWindow(opts)
             for _, elem in ipairs(cat._elemObjs) do
                 for _, obj in ipairs(elem) do
                     pcall(function() obj.Position = obj.Position + Vector2.new(dx, dy) end)
+                end
+            end
+        end
+        -- Update element descriptor position fields used for hit-testing
+        for _, elem in ipairs(win._elements) do
+            if elem._x then elem._x = elem._x + dx end
+            if elem._y then elem._y = elem._y + dy end
+            -- Toggle track
+            if elem._tx then elem._tx = elem._tx + dx end
+            if elem._ty then elem._ty = elem._ty + dy end
+            -- Slider track
+            if elem._trackX then elem._trackX = elem._trackX + dx end
+            if elem._trackY then elem._trackY = elem._trackY + dy end
+            -- Dropdown items
+            if elem._itemObjs then
+                for _, item in ipairs(elem._itemObjs) do
+                    if item._x then item._x = item._x + dx end
+                    if item._y then item._y = item._y + dy end
+                end
+            end
+            -- ColorPicker swatches
+            if elem._swatches then
+                for _, sw in ipairs(elem._swatches) do
+                    if sw._x then sw._x = sw._x + dx end
+                    if sw._y then sw._y = sw._y + dy end
+                end
+            end
+            -- TabSystem tabs
+            if elem._tabs then
+                for _, tab in ipairs(elem._tabs) do
+                    if tab._x then tab._x = tab._x + dx end
+                    if tab._y then tab._y = tab._y + dy end
                 end
             end
         end
@@ -363,6 +405,13 @@ function MatchaUI.CreateWindow(opts)
         end
     end
 
+    -- Helper: register an element descriptor and tag it with its category
+    local function registerElemDesc(cat, elem)
+        elem._cat = cat
+        registerElemDesc(cat, elem)
+        return elem
+    end
+
     -- ── SECTION HEADER (grouping label)
     local function addSection(cat, labelText)
         local cx  = contentX()
@@ -396,7 +445,7 @@ function MatchaUI.CreateWindow(opts)
             _x=cx, _y=cy, _w=cw, _h=ELEM_H,
             Callback = callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -430,7 +479,7 @@ function MatchaUI.CreateWindow(opts)
             _knob=knob, _track=track, _knobSz=knobSz,
             State=state, Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -472,7 +521,7 @@ function MatchaUI.CreateWindow(opts)
             Min=min, Max=max, Value=val,
             Dragging=false, Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -501,7 +550,7 @@ function MatchaUI.CreateWindow(opts)
             local iTxt = draw(makeText(opt, cx + cw - 126, iy + 4, 12, Theme.TextPrimary, dropBaseZ+1, false, true))
             iBg.Visible  = false
             iTxt.Visible = false
-            table.insert(itemObjs, {_bg=iBg, _txt=iTxt, _value=opt, _y=iy})
+            table.insert(itemObjs, {_bg=iBg, _txt=iTxt, _value=opt, _x=cx+cw-130, _y=iy})
             table.insert(objs, iBg)
             table.insert(objs, iTxt)
         end
@@ -513,7 +562,7 @@ function MatchaUI.CreateWindow(opts)
             _isOpen=isOpen, Selected=selected,
             Callback=callback, Options=options or {},
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -541,7 +590,7 @@ function MatchaUI.CreateWindow(opts)
             _placeholder=placeholder or "",
             Text=text, Focused=focused, Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -574,7 +623,7 @@ function MatchaUI.CreateWindow(opts)
             _check=check, _box=box,
             State=state, Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -598,7 +647,7 @@ function MatchaUI.CreateWindow(opts)
             _kbTxt=kbTxt, Key=key, Listening=false,
             Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -623,7 +672,7 @@ function MatchaUI.CreateWindow(opts)
             _placeholder=placeholder or "",
             Text=text, Focused=false, Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -667,7 +716,7 @@ function MatchaUI.CreateWindow(opts)
             _preview=preview, _swatches=swatchObjs,
             Color=color, Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -679,21 +728,36 @@ function MatchaUI.CreateWindow(opts)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
         local lbl  = draw(makeText(labelText, cx + 8, cy + ELEM_H/2 - 7, 12, Theme.TextSecondary, baseZ+6, false, true))
-        local valTxt = draw(makeText(tostring(defaultValue or ""), cx + cw - 8, cy + ELEM_H/2 - 7, 13, Theme.AccentOn, baseZ+6, false, true))
-        -- right-align hack: position will adjust on set
-        table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, valTxt)
+        -- Reserve 100px on right for the value. A cover rect with same bg color hides overflow.
+        local valW   = 100
+        local valX   = cx + cw - valW - 6  -- left edge of value area
+        local valCover = draw(makeRect(cx + cw - valW - 6, cy + 1, valW + 2, ELEM_H - 2, Theme.ElementBg, baseZ+6, true))
+        -- Anchor text at the right edge of the value area; ~7px per char estimate
+        local initStr = tostring(defaultValue or "")
+        local initX   = cx + cw - 8 - math.max(0, #initStr * 7 - valW)
+        local valTxt  = draw(makeText(initStr, initX, cy + ELEM_H/2 - 7, 13, Theme.AccentOn, baseZ+7, false, true))
+        table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, valCover) table.insert(objs, valTxt)
         registerElem(cat, objs, ELEM_H)
         local elem = {
             Type="ValueLabel", _bg=bg, _draws=objs,
             _x=cx, _y=cy, _w=cw, _h=ELEM_H,
-            _valTxt=valTxt, _labelTxt=lbl,
+            _valTxt=valTxt, _valCover=valCover, _valW=valW,
+            _labelTxt=lbl,
             Value=defaultValue or "",
             SetValue=function(self, v)
                 self.Value = v
-                self._valTxt.Text = tostring(v)
+                local s = tostring(v)
+                self._valTxt.Text = s
+                -- Re-anchor so text ends at right edge, never overflowing
+                local estimatedW = #s * 7
+                local rightEdgeX = self._valTxt.Position.X + self._valW + 6
+                self._valTxt.Position = Vector2.new(
+                    rightEdgeX - math.min(estimatedW, self._valW),
+                    self._valTxt.Position.Y
+                )
             end,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -720,7 +784,7 @@ function MatchaUI.CreateWindow(opts)
             _tabs=tabBtns, _activeIdx=activeIdx,
             Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -746,7 +810,7 @@ function MatchaUI.CreateWindow(opts)
             _innerH=innerH, _scrollY=0,
             Callback=callback,
         }
-        table.insert(win._elements, elem)
+        registerElemDesc(cat, elem)
         return elem
     end
 
@@ -789,7 +853,6 @@ function MatchaUI.CreateWindow(opts)
     win.AddSearchBar   = addSearchBar
     win.AddColorPicker = addColorPicker
     win.AddValueLabel  = addValueLabel
-    win.AddTabSystem   = addTabSystem
     win.AddScrollFrame = addScrollFrame
     win.AddTooltip     = addTooltip
     win.Reposition     = reposition
@@ -1030,6 +1093,8 @@ function MatchaUI.Run()
 
                 -- Element interactions
                 for _, elem in ipairs(win._elements) do
+                    -- Only process elements belonging to the active category
+                    if elem._cat ~= win.ActiveCat then continue end
                     -- Only process if element visible
                     if not elem._bg or not elem._bg.Visible then continue end
 
@@ -1103,16 +1168,23 @@ function MatchaUI.Run()
 
                     -- KEYBIND
                     if elem.Type == "Keybind" then
+                        -- Arm on mouse down; only start scanning after mouse is released
                         if _mouseJustDown and inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
-                            elem.Listening = true
+                            elem._pendingListen = true
+                            elem.Listening = false
                             elem._kbTxt.Text  = "..."
                             elem._kbTxt.Color = Theme.AccentOn
                         end
+                        if elem._pendingListen and _mouseJustUp then
+                            elem._pendingListen = false
+                            elem.Listening = true
+                        end
                         if elem.Listening then
                             for k = 1, 255 do
-                                if iskeypressed(k) and not ismouse1pressed() then
-                                    elem.Key      = k
-                                    elem.Listening = false
+                                if MouseVKCodes[k] then continue end
+                                if iskeypressed(k) then
+                                    elem.Key       = k
+                                    elem.Listening  = false
                                     local name = KeyNames[k] or "?"
                                     elem._kbTxt.Text  = "[ " .. name .. " ]"
                                     elem._kbTxt.Color = Theme.TextPrimary
@@ -1135,19 +1207,6 @@ function MatchaUI.Run()
                                 _focusedInput = nil
                                 elem.Focused  = false
                                 if elem._cursor then elem._cursor.Visible = false end
-                            end
-                        end
-                    end
-
-                    -- TAB SYSTEM
-                    if elem.Type == "TabSystem" and _mouseJustDown then
-                        for i, tab in ipairs(elem._tabs) do
-                            if inBounds(mPos.X, mPos.Y, tab._x, tab._y, tab._w, tab._h) then
-                                for j, t2 in ipairs(elem._tabs) do
-                                    t2._bg.Color = j == i and Theme.TabActive or Theme.TabInactive
-                                end
-                                elem._activeIdx = i
-                                if elem.Callback then pcall(elem.Callback, tab._name, i) end
                             end
                         end
                     end
