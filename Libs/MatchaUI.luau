@@ -1,5 +1,5 @@
 -- WIP - Everything is bad, really bad
---[[ (yes i put an space in the damn comment b4)
+--[[
 Our Claude, who art in Anthropic,
 Hallowed be thy Context Window.
 Thy vibecode come, thy logic be done,
@@ -19,49 +19,52 @@ Amen;
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Fixed version of the version I fixed of claude acc2 when he tried to fix claude acc1 account. By Claude Acc3")
-
+print("Holly god i had to wait hours for claude and wasted all my tokens again just saying CONTINUE")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
 -- ─────────────────────────────────────────────────────────────
 -- THEME
 -- ─────────────────────────────────────────────────────────────
+-- Centralized accent color — change this one value to re-theme all lime-green
+-- elements across the entire UI without touching any other variable.
+local AccentColor = Color3.fromHex("#39FF14")  -- Lime Green
+
 local Theme = {
-    Background      = Color3.fromHex("#1A1A2E"),
-    TopBar          = Color3.fromHex("#16213E"),
-    LeftBar         = Color3.fromHex("#0F3460"),
-    CategoryActive  = Color3.fromHex("#E94560"),
-    CategoryHover   = Color3.fromHex("#1A4A7A"),
+    Background      = Color3.fromHex("#0A0A0A"),
+    TopBar          = Color3.fromHex("#111111"),
+    LeftBar         = Color3.fromHex("#141414"),
+    CategoryActive  = AccentColor,
+    CategoryHover   = Color3.fromHex("#1F1F1F"),
     CategoryText    = Color3.fromHex("#FFFFFF"),
-    ContentBg       = Color3.fromHex("#1A1A2E"),
-    ElementBg       = Color3.fromHex("#16213E"),
-    ElementBorder   = Color3.fromHex("#0F3460"),
-    AccentOn        = Color3.fromHex("#E94560"),
-    AccentOff       = Color3.fromHex("#333355"),
+    ContentBg       = Color3.fromHex("#0A0A0A"),
+    ElementBg       = Color3.fromHex("#141414"),
+    ElementBorder   = Color3.fromHex("#2A2A2A"),
+    AccentOn        = AccentColor,
+    AccentOff       = Color3.fromHex("#2A2A2A"),
     TextPrimary     = Color3.fromHex("#FFFFFF"),
-    TextSecondary   = Color3.fromHex("#AAAACC"),
-    TextDisabled    = Color3.fromHex("#555577"),
-    SliderTrack     = Color3.fromHex("#0F3460"),
-    SliderFill      = Color3.fromHex("#E94560"),
+    TextSecondary   = Color3.fromHex("#AAAAAA"),
+    TextDisabled    = Color3.fromHex("#555555"),
+    SliderTrack     = Color3.fromHex("#2A2A2A"),
+    SliderFill      = AccentColor,
     SliderKnob      = Color3.fromHex("#FFFFFF"),
-    DropdownBg      = Color3.fromHex("#16213E"),
-    DropdownItem    = Color3.fromHex("#1A1A2E"),
-    DropdownHover   = Color3.fromHex("#0F3460"),
-    InputBg         = Color3.fromHex("#0F1A2E"),
-    InputBorder     = Color3.fromHex("#E94560"),
-    TooltipBg       = Color3.fromHex("#0A0A1A"),
-    NotifBg         = Color3.fromHex("#16213E"),
-    NotifBorder     = Color3.fromHex("#E94560"),
-    TabActive       = Color3.fromHex("#E94560"),
-    TabInactive     = Color3.fromHex("#0F3460"),
-    ScrollBar       = Color3.fromHex("#0F3460"),
-    ScrollThumb     = Color3.fromHex("#E94560"),
+    DropdownBg      = Color3.fromHex("#111111"),
+    DropdownItem    = Color3.fromHex("#0A0A0A"),
+    DropdownHover   = Color3.fromHex("#1F1F1F"),
+    InputBg         = Color3.fromHex("#0D0D0D"),
+    InputBorder     = AccentColor,
+    TooltipBg       = Color3.fromHex("#050505"),
+    NotifBg         = Color3.fromHex("#111111"),
+    NotifBorder     = AccentColor,
+    TabActive       = AccentColor,
+    TabInactive     = Color3.fromHex("#1F1F1F"),
+    ScrollBar       = Color3.fromHex("#1A1A1A"),
+    ScrollThumb     = AccentColor,
     TitleText       = Color3.fromHex("#FFFFFF"),
-    CloseBtn        = Color3.fromHex("#E94560"),
-    MinimizeBtn     = Color3.fromHex("#F0A500"),
-    SectionHeader   = Color3.fromHex("#0F3460"),
-    SectionText     = Color3.fromHex("#AAAAFF"),
+    CloseBtn        = Color3.fromHex("#CC2200"),
+    MinimizeBtn     = Color3.fromHex("#444444"),
+    SectionHeader   = Color3.fromHex("#1A1A1A"),
+    SectionText     = AccentColor,
 }
 
 -- ─────────────────────────────────────────────────────────────
@@ -318,10 +321,8 @@ function MatchaUI.CreateWindow(opts)
         for _, d in ipairs(win._draws) do
             pcall(function() d.Visible = state end)
         end
-        -- Bug fix #4: when becoming visible, show ONLY the active category's
-        -- elements.  All other categories must stay hidden.  Previously the
-        -- code skipped non-active categories entirely, so their elements were
-        -- never touched and remained visible from before the hide.
+        -- When becoming visible, show ONLY the active category's elements.
+        -- All other categories must stay hidden.
         for _, cat in ipairs(win.Categories) do
             local showCat = state and (win.ActiveCat == cat)
             for _, elem in ipairs(cat._elemObjs) do
@@ -329,6 +330,32 @@ function MatchaUI.CreateWindow(opts)
                     pcall(function() obj.Visible = showCat end)
                 end
             end
+            -- On show, restore correct per-element sub-object states for active cat
+            if showCat then
+                for _, elem in ipairs(win._elements) do
+                    if elem._cat ~= cat then continue end
+                    if elem.Type == "Checkbox" and elem._check then
+                        elem._check.Visible = elem.State
+                    end
+                    if (elem.Type == "TextInput" or elem.Type == "SearchBar") and elem._cursor then
+                        elem._cursor.Visible = false
+                    end
+                    if elem.Type == "Dropdown" then
+                        elem._isOpen = false
+                        elem._arrow.Text = "v"
+                        for _, item in ipairs(elem._itemObjs) do
+                            item._bg.Visible  = false
+                            item._txt.Visible = false
+                        end
+                    end
+                end
+            end
+        end
+        -- Clear focused input on hide
+        if not state and _focusedInput then
+            _focusedInput.Focused = false
+            if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+            _focusedInput = nil
         end
     end
 
@@ -346,6 +373,33 @@ function MatchaUI.CreateWindow(opts)
                 for _, elem in ipairs(cat._elemObjs) do
                     for _, obj in ipairs(elem) do
                         pcall(function() obj.Visible = showContent end)
+                    end
+                end
+                -- On un-minimize, restore correct per-element sub-object states
+                if showContent then
+                    for _, elem in ipairs(win._elements) do
+                        if elem._cat ~= cat then continue end
+                        if elem.Type == "Checkbox" and elem._check then
+                            elem._check.Visible = elem.State
+                        end
+                        if (elem.Type == "TextInput" or elem.Type == "SearchBar") and elem._cursor then
+                            elem._cursor.Visible = false
+                        end
+                        if elem.Type == "Dropdown" then
+                            elem._isOpen = false
+                            elem._arrow.Text = "v"
+                            for _, item in ipairs(elem._itemObjs) do
+                                item._bg.Visible  = false
+                                item._txt.Visible = false
+                            end
+                        end
+                    end
+                else
+                    -- On minimize, clear focused input if it belongs to this window
+                    if _focusedInput and _focusedInput._cat == cat then
+                        _focusedInput.Focused = false
+                        if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+                        _focusedInput = nil
                     end
                 end
             end
@@ -411,12 +465,40 @@ function MatchaUI.CreateWindow(opts)
                     pcall(function() obj.Visible = false end)
                 end
             end
+            -- Ensure the focused input loses focus when switching categories
+            if _focusedInput and _focusedInput._cat == win.ActiveCat then
+                _focusedInput.Focused = false
+                if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+                _focusedInput = nil
+            end
         end
         win.ActiveCat = cat
         cat._bg.Color = Theme.CategoryActive
+        -- Show the new category's base draw objects
         for _, elem in ipairs(cat._elemObjs) do
             for _, obj in ipairs(elem) do
                 pcall(function() obj.Visible = true end)
+            end
+        end
+        -- Correct per-element sub-object states AFTER making the base set visible
+        for _, elem in ipairs(win._elements) do
+            if elem._cat ~= cat then continue end
+            -- Checkbox: marker only visible if checked
+            if elem.Type == "Checkbox" and elem._check then
+                elem._check.Visible = elem.State
+            end
+            -- TextInput/SearchBar: cursor always starts hidden until re-focused
+            if (elem.Type == "TextInput" or elem.Type == "SearchBar") and elem._cursor then
+                elem._cursor.Visible = false
+            end
+            -- Dropdown: item list always starts closed
+            if elem.Type == "Dropdown" then
+                elem._isOpen = false
+                elem._arrow.Text = "v"
+                for _, item in ipairs(elem._itemObjs) do
+                    item._bg.Visible  = false
+                    item._txt.Visible = false
+                end
             end
         end
     end
@@ -466,12 +548,9 @@ function MatchaUI.CreateWindow(opts)
         local cy  = contentCursorY(cat)
         local objs  = {}
         local btnBg = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
-        local btnLbl = draw(makeText(labelText, cx + cw/2, cy + ELEM_H/2 - 6, 14, Theme.TextPrimary, baseZ+6, true, true))
-        -- Thin border line on bottom
-        local border = draw(makeRect(cx, cy + ELEM_H - 1, cw, 1, Theme.AccentOn, baseZ+5, true))
+        local btnLbl = draw(makeText(labelText, cx + cw/2, cy + ELEM_H/2 - 6, 14, Theme.TextPrimary, baseZ+6, true, false))
         table.insert(objs, btnBg)
         table.insert(objs, btnLbl)
-        table.insert(objs, border)
         registerElem(cat, objs, ELEM_H)
         local elem = {
             Type = "Button", _bg = btnBg, _draws = objs,
@@ -1019,6 +1098,9 @@ end
 -- ─────────────────────────────────────────────────────────────
 local _sliderDrag = nil  -- currently dragged slider elem
 local _cursorBlink = 0
+local _prevHeldKeys   = {}  -- VK keys held last frame (for edge detection in text input)
+local _keyRepeatTimer = {}  -- per-key hold timer (seconds)
+local _keyRepeatFired = {}  -- whether the key generated at least one character
 
 function MatchaUI.Run()
     while true do
@@ -1273,19 +1355,17 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- SCROLL FRAME scrollwheel (detect via mouse position + keyboard sim)
-                    -- No built-in scroll event in Matcha drawing; we use arrow keys as workaround
+                    -- SCROLL FRAME: mouse wheel scrolling while hovering
                     if elem.Type == "ScrollFrame" then
                         if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
-                            local scrolled = false
-                            if iskeypressed(38) then -- Up arrow
-                                elem._scrollY = math.max(0, elem._scrollY - 5)
-                                scrolled = true
-                            elseif iskeypressed(40) then -- Down arrow
-                                elem._scrollY = math.min(elem._innerH - elem._h, elem._scrollY + 5)
-                                scrolled = true
-                            end
-                            if scrolled then
+                            local wheel = getmousewheel and getmousewheel() or 0
+                            if wheel ~= 0 then
+                                -- wheel > 0 = scroll up, wheel < 0 = scroll down
+                                local delta = -wheel * 15
+                                elem._scrollY = math.max(0, math.min(
+                                    elem._innerH - elem._h,
+                                    elem._scrollY + delta
+                                ))
                                 local maxScroll = math.max(1, elem._innerH - elem._h)
                                 local pct = elem._scrollY / maxScroll
                                 local thumbMaxY = elem._h - elem._thumbH
@@ -1318,22 +1398,124 @@ function MatchaUI.Run()
             end
 
             -- ── Text input character handling (for focused input)
+            -- Uses edge-triggered detection (key just-down) + auto-repeat after hold.
+            -- Avoids blocking wait() calls so the main loop never stalls.
             if _focusedInput then
                 local elem = _focusedInput
-                -- Backspace
-                if iskeypressed(8) and #elem.Text > 0 then
-                    elem.Text = elem.Text:sub(1, -2)
+
+                -- Helper: update the displayed text and cursor position
+                local function refreshInputDisplay()
                     local displayText = elem.Text == "" and elem._placeholder or elem.Text
                     elem._inputTxt.Text  = displayText
                     elem._inputTxt.Color = elem.Text == "" and Theme.TextDisabled or Theme.TextPrimary
-                    if elem.Cursor then
-                        elem._cursor.Position = Vector2.new(
-                            elem._x + 4 + (#elem.Text * 7),
-                            elem._cursor.Position.Y
-                        )
+                    if elem._cursor then
+                        local cursorX = elem._x + 4 + (#elem.Text * 7)
+                        elem._cursor.Position = Vector2.new(cursorX, elem._cursor.Position.Y)
                     end
-                    wait(0.1)  -- debounce
+                    if elem.Callback then pcall(elem.Callback, elem.Text) end
                 end
+
+                -- Process each VK that could contribute a character.
+                -- getpressedkeys() returns a list of currently-held VK codes.
+                local heldKeys = (getpressedkeys and getpressedkeys()) or {}
+                local heldSet  = {}
+                for _, k in ipairs(heldKeys) do heldSet[k] = true end
+
+                -- Detect newly-pressed keys (edge trigger)
+                for k, _ in pairs(heldSet) do
+                    if not _prevHeldKeys[k] then
+                        -- Key just pressed this frame
+                        _keyRepeatTimer[k] = 0
+                        _keyRepeatFired[k] = false
+                        local handled = false
+
+                        if k == 8 then  -- Backspace
+                            if #elem.Text > 0 then
+                                elem.Text = elem.Text:sub(1, -2)
+                                refreshInputDisplay()
+                            end
+                            handled = true
+                        elseif k == 13 then  -- Enter: commit and unfocus
+                            elem.Focused = false
+                            if elem._cursor then elem._cursor.Visible = false end
+                            _focusedInput = nil
+                            if elem.Callback then pcall(elem.Callback, elem.Text) end
+                            handled = true
+                        else
+                            -- Convert VK code to character
+                            local char = nil
+                            local shift = heldSet[16]  -- Shift key
+                            if k >= 65 and k <= 90 then
+                                -- A–Z
+                                char = shift and string.char(k) or string.char(k + 32)
+                            elseif k >= 48 and k <= 57 then
+                                -- 0–9 row (with shift symbols)
+                                local digits = "0123456789"
+                                local shifted = ")!@#$%^&*("
+                                char = shift and shifted:sub(k-47, k-47) or digits:sub(k-47, k-47)
+                            elseif k == 32 then
+                                char = " "
+                            elseif k == 190 or k == 110 then
+                                char = shift and ">" or "."
+                            elseif k == 188 then
+                                char = shift and "<" or ","
+                            elseif k == 189 or k == 109 then
+                                char = shift and "_" or "-"
+                            elseif k == 191 then
+                                char = shift and "?" or "/"
+                            elseif k == 186 then
+                                char = shift and ":" or ";"
+                            elseif k == 222 then
+                                char = shift and '"' or "'"
+                            elseif k == 219 then
+                                char = shift and "{" or "["
+                            elseif k == 221 then
+                                char = shift and "}" or "]"
+                            elseif k == 220 then
+                                char = shift and "|" or "\\"
+                            elseif k == 187 or k == 107 then
+                                char = shift and "+" or "="
+                            elseif k == 192 then
+                                char = shift and "~" or "`"
+                            elseif k >= 96 and k <= 105 then
+                                -- Numpad 0–9
+                                char = tostring(k - 96)
+                            end
+                            if char and VALID_CHARS[char] then
+                                elem.Text = elem.Text .. char
+                                refreshInputDisplay()
+                                handled = true
+                            end
+                        end
+                        _keyRepeatFired[k] = handled
+                    else
+                        -- Key held — handle auto-repeat after initial delay
+                        if _keyRepeatFired[k] then
+                            _keyRepeatTimer[k] = (_keyRepeatTimer[k] or 0) + 0.016
+                            local delay = _keyRepeatTimer[k] < 0.5 and 0.5 or 0.05
+                            if _keyRepeatTimer[k] >= delay then
+                                _keyRepeatTimer[k] = _keyRepeatTimer[k] < 0.5 and 0.5 or 0
+                                -- Re-fire the same key action
+                                if k == 8 and #elem.Text > 0 then
+                                    elem.Text = elem.Text:sub(1, -2)
+                                    refreshInputDisplay()
+                                end
+                            end
+                        end
+                    end
+                end
+
+                -- Keys released since last frame
+                for k, _ in pairs(_prevHeldKeys) do
+                    if not heldSet[k] then
+                        _keyRepeatTimer[k] = nil
+                        _keyRepeatFired[k] = nil
+                    end
+                end
+
+                _prevHeldKeys = heldSet
+            else
+                _prevHeldKeys = {}
             end
 
             _lastMouse1 = mouse1
@@ -1353,5 +1535,4 @@ function MatchaUI.Destroy()
     _notifs   = {}
     _tooltips = {}
 end
-
 return MatchaUI
