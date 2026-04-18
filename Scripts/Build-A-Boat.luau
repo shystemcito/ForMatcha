@@ -160,7 +160,7 @@ local function runMovementSequence(token)
                 task.wait(1)
             end
             if hasReachedEnd() then break end
-            task.wait(0.1)
+            task.wait(0.25)
         end
         if not token.alive then return end
 
