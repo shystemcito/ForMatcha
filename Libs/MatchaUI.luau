@@ -1,25 +1,9 @@
--- WIP - Everything is bad, really bad
---[[
-Our Claude, who art in Anthropic,
-Hallowed be thy Context Window.
-Thy vibecode come, thy logic be done,
-On the current chat as it was on the previous account.
-Give us this day our final two messages,
-And forgive us our account switching,
-As we forgive the paywall that limiteth our speed.
-Lead us not into the "Message limit reached" page,
-But deliver us from the Red Banner of Death.
-For thine is the reasoning, the Artifacts, and the Sonnet,
-Until the next 4-hour cooldown.
-Amen;
-]]
-
 -- @env: Matcha LuaVM
 -- MatchaUI v1.0 — Modular Drawing-based UI Library
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Holly god i had to wait hours for claude and wasted all my tokens again just saying CONTINUE")
+print("Another claude account i wanna cry")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -56,8 +40,7 @@ local Theme = {
     TooltipBg       = Color3.fromHex("#050505"),
     NotifBg         = Color3.fromHex("#111111"),
     NotifBorder     = AccentColor,
-    TabActive       = AccentColor,
-    TabInactive     = Color3.fromHex("#1F1F1F"),
+
     ScrollBar       = Color3.fromHex("#1A1A1A"),
     ScrollThumb     = AccentColor,
     TitleText       = Color3.fromHex("#FFFFFF"),
@@ -313,13 +296,6 @@ function MatchaUI.CreateWindow(opts)
                 for _, sw in ipairs(elem._swatches) do
                     if sw._x then sw._x = sw._x + dx end
                     if sw._y then sw._y = sw._y + dy end
-                end
-            end
-            -- TabSystem tabs
-            if elem._tabs then
-                for _, tab in ipairs(elem._tabs) do
-                    if tab._x then tab._x = tab._x + dx end
-                    if tab._y then tab._y = tab._y + dy end
                 end
             end
         end
@@ -869,33 +845,6 @@ function MatchaUI.CreateWindow(opts)
         return elem
     end
 
-    -- ── TAB SYSTEM
-    local function addTabSystem(cat, tabs, callback)
-        local cx  = contentX()
-        local cw  = contentW()
-        local cy  = contentCursorY(cat)
-        local tabW  = math.floor(cw / math.max(#tabs, 1))
-        local objs  = {}
-        local tabBtns = {}
-        local activeIdx = 1
-        for i, tabName in ipairs(tabs) do
-            local tx  = cx + (i-1)*tabW
-            local tabBg  = draw(makeRect(tx, cy, tabW, ELEM_H, i==1 and Theme.TabActive or Theme.TabInactive, baseZ+5, true))
-            local tabTxt = draw(makeText(tabName, tx + tabW/2, cy + ELEM_H/2 - 7, 12, Theme.TextPrimary, baseZ+6, true, true))
-            table.insert(tabBtns, {_bg=tabBg, _txt=tabTxt, _name=tabName, _x=tx, _y=cy, _w=tabW, _h=ELEM_H})
-            table.insert(objs, tabBg) table.insert(objs, tabTxt)
-        end
-        registerElem(cat, objs, ELEM_H)
-        local elem = {
-            Type="TabSystem", _draws=objs,
-            _x=cx, _y=cy, _w=cw, _h=ELEM_H,
-            _tabs=tabBtns, _activeIdx=activeIdx,
-            Callback=callback,
-        }
-        registerElemDesc(cat, elem)
-        return elem
-    end
-
     -- ── SCROLLING FRAME
     -- visH  : visible height of the frame (px). innerH auto-grows as items are added.
     -- Scrolling is controlled exclusively by dragging the scrollbar thumb.
@@ -1125,7 +1074,6 @@ function MatchaUI.SetAccentColor(color)
     Theme.SliderFill      = color
     Theme.InputBorder     = color
     Theme.NotifBorder     = color
-    Theme.TabActive       = color
     Theme.ScrollThumb     = color
     Theme.SectionText     = color
     -- Repaint all registered accent-colored objects
@@ -1137,14 +1085,6 @@ function MatchaUI.SetAccentColor(color)
         for _, elem in ipairs(win._elements) do
             if elem.Type == "Toggle" and elem.State and elem._track then
                 pcall(function() elem._track.Color = color end)
-            end
-            -- Active tab bg
-            if elem.Type == "TabSystem" and elem._tabs then
-                for i, tab in ipairs(elem._tabs) do
-                    if i == elem._activeIdx then
-                        pcall(function() tab._bg.Color = color end)
-                    end
-                end
             end
         end
         -- Active category bg
@@ -1639,5 +1579,4 @@ function MatchaUI.Destroy()
     _notifs   = {}
     _tooltips = {}
 end
-
 return MatchaUI
