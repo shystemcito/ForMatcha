@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("AI have to much bugs :(")
+print("This is my last account so if this dont work im cooked til tomorrow")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -1225,11 +1225,11 @@ function MatchaUI.CreateWindow(opts)
     -- Supports both text rows (AddItem) and full UI elements (AddWidget).
     -- Scrolling is controlled by dragging the scrollbar thumb or content drag.
     -- Each frame in the main loop re-positions and clips all child objects.
-    local function addScrollFrame(cat, innerH, callback)
+    local function addScrollFrame(cat, innerH, callback, customVisH)
         local cx   = contentX()
         local cw   = contentW()
         local cy   = contentCursorY(cat)
-        local visH = math.min(innerH, 80)
+        local visH = customVisH or math.min(innerH, 80)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, visH, Theme.InputBg, baseZ+5, true))
         trackTheme("InputBg", bg)
@@ -1983,11 +1983,25 @@ function MatchaUI.Run()
                                 local thumbTopY  = elem._y + (elem._scrollY / maxScroll) * thumbMaxY
                                 elem._thumbDragOffY = mPos.Y - thumbTopY
                             elseif inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w - sbW, elem._h) then
-                                -- Clicked content area — content drag
-                                elem._contentDragging       = true
-                                elem._thumbDragging         = false
-                                elem._contentDragStartY     = mPos.Y
-                                elem._contentDragStartScroll = elem._scrollY
+                                -- Check if click lands on a ColorPicker header inside this frame.
+                                -- If so, skip starting a content drag so the picker can open.
+                                local onColorPickerHeader = false
+                                for _, widget in ipairs(elem._widgets) do
+                                    local wElem = widget._elem
+                                    if wElem.Type == "ColorPicker" and wElem._headerX then
+                                        if inBounds(mPos.X, mPos.Y, wElem._headerX, wElem._headerY, wElem._headerW, wElem._headerH) then
+                                            onColorPickerHeader = true
+                                            break
+                                        end
+                                    end
+                                end
+                                if not onColorPickerHeader then
+                                    -- Clicked content area — content drag
+                                    elem._contentDragging       = true
+                                    elem._thumbDragging         = false
+                                    elem._contentDragStartY     = mPos.Y
+                                    elem._contentDragStartScroll = elem._scrollY
+                                end
                             end
                         end
 
@@ -2031,8 +2045,9 @@ function MatchaUI.Run()
                             for _, item in ipairs(elem._items) do
                                 local absY = elem._y + item._relY - elem._scrollY
                                 item._txt.Position = Vector2.new(elem._x + 6, absY)
+                                local itemH = elem._itemH or 18
                                 item._txt.Visible  = (absY >= elem._y)
-                                    and (absY + (elem._itemH or 18) <= elem._y + elem._h)
+                                    and (absY + itemH <= elem._y + elem._h)
                             end
                         end
                         -- Reposition and clip widget draw objects every frame
@@ -2040,6 +2055,7 @@ function MatchaUI.Run()
                             for _, widget in ipairs(elem._widgets) do
                                 local baseAbsY = elem._y + widget._relY - elem._scrollY
                                 local wElem    = widget._elem
+                                local wHeight  = widget._h or ELEM_H
                                 local dy = baseAbsY - (wElem._y or baseAbsY)
                                 -- Shift element descriptor Y fields
                                 if wElem._y then wElem._y = wElem._y + dy end
@@ -2053,7 +2069,10 @@ function MatchaUI.Run()
                                     pcall(function()
                                         obj.Position = obj.Position + Vector2.new(0, dy)
                                         local oY = obj.Position.Y
-                                        obj.Visible = (oY >= elem._y) and (oY < elem._y + elem._h)
+                                        -- Use full widget height for bottom clipping so the last
+                                        -- element doesn't bleed past the frame's lower edge.
+                                        obj.Visible = (oY >= elem._y)
+                                            and (oY + wHeight <= elem._y + elem._h)
                                     end)
                                 end
                                 -- Post-clip corrections for sub-objects whose visibility
