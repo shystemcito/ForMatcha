@@ -19,7 +19,7 @@ Amen;
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Dale a tu cuerpo alegria macarena")
+print("Holly god i had to wait hours for claude and wasted all my tokens again just saying CONTINUE")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -181,6 +181,18 @@ local VALID_KEYBIND_KEYS = {
     [117]=true,[118]=true,[119]=true,[120]=true,[121]=true,
     [122]=true,[123]=true,
 }
+
+-- ─────────────────────────────────────────────────────────────
+-- ACCENT COLOR REGISTRY
+-- ─────────────────────────────────────────────────────────────
+-- Must be declared before CreateWindow so element builder closures
+-- can call trackAccent(). SetAccentColor() iterates this table to
+-- repaint every accent-colored Drawing object live.
+local _accentObjects = {}  -- array of Drawing objects whose .Color = AccentColor
+
+local function trackAccent(obj)
+    table.insert(_accentObjects, obj)
+end
 
 -- ─────────────────────────────────────────────────────────────
 -- WINDOW CONSTRUCTOR
@@ -1101,18 +1113,6 @@ function MatchaUI.Notify(title, message, duration)
     table.insert(_notifs, notif)
     _layoutNotifs()
     return notif
-end
-
--- ─────────────────────────────────────────────────────────────
--- ACCENT COLOR  (live update — change once, re-themes everything)
--- ─────────────────────────────────────────────────────────────
--- Registry of Drawing objects that should always match AccentColor.
--- Each element builder registers its accent-colored draws here so
--- SetAccentColor can repaint them without rebuilding the UI.
-local _accentObjects = {}  -- { obj = DrawingObject, prop = "Color" }
-
-local function trackAccent(obj)
-    table.insert(_accentObjects, obj)
 end
 
 -- Call this from a ColorPicker callback (or any time) to re-theme the
