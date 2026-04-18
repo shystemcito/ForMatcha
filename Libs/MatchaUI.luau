@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Another claude account i wanna cry")
+print("Wonder how this works")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -524,7 +524,8 @@ function MatchaUI.CreateWindow(opts)
         local bg   = draw(makeRect(cx, cy, cw, 20, Theme.SectionHeader, baseZ+5, true))
         local lbl  = draw(makeText(labelText, cx + 6, cy + 4, 12, Theme.SectionText, baseZ+6, false, true))
         trackAccent(lbl)
-        table.insert(objs, lbl)
+        table.insert(objs, bg)   -- BUGFIX: bg must be in objs so it is shown/hidden with the category
+        table.insert(objs, lbl)  -- and repositioned correctly during window drag
         registerElem(cat, objs, 20)
         return objs
     end
@@ -982,27 +983,25 @@ local NOTIF_H     = 50
 local NOTIF_PAD   = 6
 local NOTIF_DUR   = 4   -- seconds
 
-local function _getNotifBaseX()
-    -- Bottom-right corner estimate
-    return 1280 - NOTIF_W - 10
-end
+-- Notifications spawn at top-left (50, 50) and stack downward.
+local NOTIF_START_X = 50
+local NOTIF_START_Y = 50
 
 local function _layoutNotifs()
-    local screen_h = 720
-    local by = screen_h - 10
-    for i = #_notifs, 1, -1 do
+    local by = NOTIF_START_Y
+    for i = 1, #_notifs do
         local n = _notifs[i]
-        by = by - NOTIF_H - NOTIF_PAD
-        n._bg.Position    = Vector2.new(_getNotifBaseX(), by)
-        n._title.Position = Vector2.new(_getNotifBaseX() + 8, by + 6)
-        n._msg.Position   = Vector2.new(_getNotifBaseX() + 8, by + 22)
-        n._bar.Position   = Vector2.new(_getNotifBaseX(), by + NOTIF_H - 4)
+        n._bg.Position    = Vector2.new(NOTIF_START_X, by)
+        n._title.Position = Vector2.new(NOTIF_START_X + 8, by + 6)
+        n._msg.Position   = Vector2.new(NOTIF_START_X + 8, by + 22)
+        n._bar.Position   = Vector2.new(NOTIF_START_X, by + NOTIF_H - 4)
+        by = by + NOTIF_H + NOTIF_PAD
     end
 end
 
 function MatchaUI.Notify(title, message, duration)
-    local nx  = _getNotifBaseX()
-    local ny  = 720 - NOTIF_H - 10 - (#_notifs * (NOTIF_H + NOTIF_PAD))
+    local nx  = NOTIF_START_X
+    local ny  = NOTIF_START_Y + #_notifs * (NOTIF_H + NOTIF_PAD)
     local dur = duration or NOTIF_DUR
 
     local bg   = newDraw("Square")
@@ -1014,14 +1013,7 @@ function MatchaUI.Notify(title, message, duration)
     bg.Transparency = 1
     bg.Visible     = true
 
-    local accent = newDraw("Square")
-    accent.Position    = Vector2.new(nx, ny)
-    accent.Size        = Vector2.new(3, NOTIF_H)
-    accent.Color       = Theme.NotifBorder
-    accent.Filled      = true
-    accent.ZIndex      = 301
-    accent.Transparency = 1
-    accent.Visible     = true
+    -- NOTE: vertical accent bar removed; only the horizontal progress bar remains.
 
     local tTitle = newDraw("Text")
     tTitle.Text        = title or "Notice"
@@ -1045,7 +1037,7 @@ function MatchaUI.Notify(title, message, duration)
     tMsg.Transparency  = 1
     tMsg.Visible       = true
 
-    -- progress bar
+    -- Horizontal progress bar (time remaining indicator)
     local bar = newDraw("Square")
     bar.Position   = Vector2.new(nx, ny + NOTIF_H - 4)
     bar.Size       = Vector2.new(NOTIF_W, 4)
@@ -1056,7 +1048,7 @@ function MatchaUI.Notify(title, message, duration)
     bar.Visible    = true
 
     local notif = {
-        _bg=bg, _accent=accent, _title=tTitle, _msg=tMsg, _bar=bar,
+        _bg=bg, _title=tTitle, _msg=tMsg, _bar=bar,
         _timer=0, _duration=dur, _done=false,
     }
     table.insert(_notifs, notif)
@@ -1094,7 +1086,6 @@ function MatchaUI.SetAccentColor(color)
     end
     -- Repaint notification accent bars currently on screen
     for _, n in ipairs(_notifs) do
-        pcall(function() n._accent.Color = color end)
         pcall(function() n._bar.Color    = color end)
         pcall(function() n._title.Color  = color end)
     end
@@ -1146,7 +1137,7 @@ function MatchaUI.Run()
                 local pct = 1 - (n._timer / n._duration)
                 n._bar.Size = Vector2.new(math.max(0, NOTIF_W * pct), 4)
                 if n._timer >= n._duration then
-                    n._bg:Remove() n._accent:Remove()
+                    n._bg:Remove()
                     n._title:Remove() n._msg:Remove() n._bar:Remove()
                     table.remove(_notifs, i)
                     _layoutNotifs()
@@ -1372,29 +1363,61 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- SCROLL FRAME: scrollbar thumb drag
+                    -- SCROLL FRAME: content drag (anywhere in frame) + scrollbar thumb drag
                     if elem.Type == "ScrollFrame" then
                         local sbX = elem._sbX or (elem._x + elem._w - 8)
                         local sbY = elem._y
                         local sbW = 6
                         local sbH = elem._h
-                        if _mouseJustDown and inBounds(mPos.X, mPos.Y, sbX, sbY, sbW, sbH) then
-                            elem._thumbDragging = true
-                            elem._thumbDragOffY = mPos.Y - elem._thumb.Position.Y
+
+                        if _mouseJustDown then
+                            if inBounds(mPos.X, mPos.Y, sbX, sbY, sbW, sbH) then
+                                -- Clicked on scrollbar thumb/track — start thumb drag
+                                elem._thumbDragging = true
+                                elem._contentDragging = false
+                                -- Offset relative to thumb top so it doesn't jump
+                                local thumbTopY = elem._y + (elem._thumbH < elem._h
+                                    and (elem._scrollY / math.max(1, elem._innerH - elem._h)) * (elem._h - elem._thumbH)
+                                    or 0)
+                                elem._thumbDragOffY = mPos.Y - thumbTopY
+                            elseif inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w - sbW, elem._h) then
+                                -- Clicked inside content area — start content drag
+                                elem._contentDragging = true
+                                elem._thumbDragging = false
+                                elem._contentDragStartY = mPos.Y
+                                elem._contentDragStartScroll = elem._scrollY
+                            end
                         end
+
                         if _mouseJustUp then
                             elem._thumbDragging = false
+                            elem._contentDragging = false
                         end
+
                         if elem._thumbDragging and mouse1 then
                             local maxScroll = math.max(1, elem._innerH - elem._h)
                             local thumbMaxY = elem._h - elem._thumbH
                             local rawY      = mPos.Y - (elem._thumbDragOffY or 0)
-                            local clampedY  = math.max(elem._y, math.min(elem._y + thumbMaxY, rawY))
-                            elem._thumb.Position = Vector2.new(sbX, clampedY)
-                            local pct       = thumbMaxY > 0 and (clampedY - elem._y) / thumbMaxY or 0
+                            local clampedY  = math.max(0, math.min(thumbMaxY, rawY - elem._y))
+                            elem._thumb.Position = Vector2.new(sbX, elem._y + clampedY)
+                            local pct       = thumbMaxY > 0 and clampedY / thumbMaxY or 0
                             elem._scrollY   = pct * maxScroll
                             if elem.Callback then pcall(elem.Callback, elem._scrollY) end
                         end
+
+                        if elem._contentDragging and mouse1 then
+                            local maxScroll = math.max(0, elem._innerH - elem._h)
+                            local dy = elem._contentDragStartY - mPos.Y  -- drag up = positive scroll
+                            local newScroll = math.max(0, math.min(maxScroll,
+                                (elem._contentDragStartScroll or 0) + dy))
+                            elem._scrollY = newScroll
+                            -- Sync thumb position
+                            local thumbMaxY = elem._h - elem._thumbH
+                            local pct = maxScroll > 0 and newScroll / maxScroll or 0
+                            elem._thumb.Position = Vector2.new(sbX, elem._y + pct * thumbMaxY)
+                            if elem.Callback then pcall(elem.Callback, elem._scrollY) end
+                        end
+
                         -- Reposition and clip item text rows every frame
                         if elem._items then
                             for _, item in ipairs(elem._items) do
@@ -1579,4 +1602,5 @@ function MatchaUI.Destroy()
     _notifs   = {}
     _tooltips = {}
 end
+
 return MatchaUI
