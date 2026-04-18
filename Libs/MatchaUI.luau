@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Hey.... guess what....")
+print("mamaaaaaaaaaaaaaaaaaaaaaaaaa")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -1821,9 +1821,20 @@ function MatchaUI.Run()
                                 for _, widget in ipairs(wElemWrap._widgets) do
                                     if widget._elem == elem then
                                         -- Check mouse is inside the ScrollFrame's visible rect
-                                        inFrame = inBounds(mPos.X, mPos.Y,
+                                        local insideFrame = inBounds(mPos.X, mPos.Y,
                                             wElemWrap._x, wElemWrap._y,
                                             wElemWrap._w - 8, wElemWrap._h)
+                                        -- COLORPICKER EXCEPTION: if the panel is open, also allow
+                                        -- clicks inside the floating panel (which lives outside the
+                                        -- frame bounds). Without this, swatches and sliders are
+                                        -- unreachable because the gate rejects them.
+                                        local insidePanel = false
+                                        if elem.Type == "ColorPicker" and elem._cpOpen then
+                                            insidePanel = inBounds(mPos.X, mPos.Y,
+                                                elem._panelX, elem._panelY,
+                                                elem._panelW, elem._panelH)
+                                        end
+                                        inFrame = insideFrame or insidePanel
                                         break
                                     end
                                 end
@@ -1999,7 +2010,64 @@ function MatchaUI.Run()
                         if _mouseJustDown and inBounds(mPos.X, mPos.Y, elem._headerX, elem._headerY, elem._headerW, elem._headerH) then
                             elem._cpOpen = not elem._cpOpen
                             elem._arrowTxt.Text = elem._cpOpen and "<" or ">"
-                            setPanelVis(elem._cpOpen)
+                            if elem._cpOpen then
+                                -- Recalculate panel position from the current _bg screen position.
+                                -- This is required when the ColorPicker lives inside a ScrollFrame:
+                                -- the _bg has been shifted by AddWidget + scroll, but panelX/panelY
+                                -- were baked in at build time using the raw category cursor position.
+                                local bgPos  = elem._bg.Position
+                                local bgSize = elem._bg.Size
+                                -- Panel anchors to the right of the window; derive window right edge
+                                -- from the bg's current X minus its offset within the content area.
+                                -- Simpler: just place the panel to the right of the window's right edge.
+                                -- We know ww and win.X from the closure; they may have changed via drag.
+                                local newPanelX = win.X + win.W + 4
+                                local newPanelY = bgPos.Y  -- vertically aligned with the header row
+
+                                -- Shift the panel background and border
+                                local pdx = newPanelX - elem._panelX
+                                local pdy = newPanelY - elem._panelY
+                                elem._panelX = newPanelX
+                                elem._panelY = newPanelY
+
+                                pcall(function()
+                                    elem._panelBg.Position     = Vector2.new(newPanelX, newPanelY)
+                                    elem._panelBorder.Position = Vector2.new(newPanelX, newPanelY)
+                                end)
+
+                                -- Shift all panelObjs by the same delta
+                                for _, po in ipairs(elem._panelObjs or {}) do
+                                    pcall(function()
+                                        po.Position = po.Position + Vector2.new(pdx, pdy)
+                                    end)
+                                end
+
+                                -- Rebuild swatch hit-test coords
+                                for _, sw in ipairs(elem._paletteSwatch or {}) do
+                                    sw._x = sw._x + pdx
+                                    sw._y = sw._y + pdy
+                                end
+
+                                -- Rebuild channel slider hit-test coords
+                                local cs = elem._channelSliders or {}
+                                for _, s in pairs(cs) do
+                                    if s._trackX then s._trackX = s._trackX + pdx end
+                                    if s._knobY  then s._knobY  = s._knobY  + pdy end
+                                    if s._rowY   then s._rowY   = s._rowY   + pdy end
+                                end
+
+                                -- Rebuild btnObjs hit-test coords
+                                for _, btn in ipairs(elem._btnObjs or {}) do
+                                    btn._x = btn._x + pdx
+                                    btn._y = btn._y + pdy
+                                    if btn._trackX then btn._trackX = btn._trackX + pdx end
+                                    if btn._knobY  then btn._knobY  = btn._knobY  + pdy end
+                                end
+
+                                setPanelVis(true)
+                            else
+                                setPanelVis(false)
+                            end
                         end
 
                         if elem._cpOpen then
@@ -2199,12 +2267,32 @@ function MatchaUI.Run()
                                         wElem._check.Visible = wElem.State
                                     end
                                 end
+                                -- TextInput: cursor must only be visible when the input is focused.
+                                -- The clipping pass sets Visible=true based on position alone,
+                                -- which makes the cursor appear even when nobody is typing.
+                                if wElem.Type == "TextInput" and wElem._cursor then
+                                    if wElem._cursor.Visible and not wElem.Focused then
+                                        wElem._cursor.Visible = false
+                                    end
+                                end
                                 if wElem.Type == "ColorPicker" and not wElem._cpOpen then
                                     -- Clipping may have revealed panel objs that slipped
                                     -- through; force them closed if panel is not open.
                                     if wElem._panelObjs then
                                         for _, po in ipairs(wElem._panelObjs) do
                                             pcall(function() po.Visible = false end)
+                                        end
+                                    end
+                                elseif wElem.Type == "ColorPicker" and wElem._cpOpen then
+                                    -- Panel is open: the clipping pass may have incorrectly
+                                    -- hidden panel objects because they sit outside the frame
+                                    -- bounds. Since panelObjs are in panelObjSet the clipping
+                                    -- loop skips them, but setPanelVis already set them visible
+                                    -- on open — no extra work needed here. This branch is a
+                                    -- safety guard only: re-assert visibility.
+                                    if wElem._panelObjs then
+                                        for _, po in ipairs(wElem._panelObjs) do
+                                            pcall(function() po.Visible = true end)
                                         end
                                     end
                                 end
