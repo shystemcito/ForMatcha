@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("killmeplease")
+print("Rollback...")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -1124,62 +1124,56 @@ function MatchaUI.CreateWindow(opts)
         --       return Window.AddButton(catFoo, "My Button", callback)
         --   end)
         --
-        -- The widget scrolls with the frame. Each draw object has its base Y stored
-        -- so the main loop can recompute the correct absolute Y every frame without drift.
+        -- The widget is positioned relative to the scroll frame's content area and will
+        -- scroll with the frame. Its height is taken from elem._h on the descriptor.
         function elem:AddWidget(builder)
-            -- Compute relY: vertical offset from the top of this scroll frame's content area.
+            -- Temporarily adjust the category cursor so the element lands inside us.
+            -- We compute the desired relY (distance from top of scroll frame content).
             local neededInnerH = 0
             for _, w in ipairs(self._widgets) do
                 neededInnerH = neededInnerH + w._h + 2
             end
-            for _, _ in ipairs(self._items) do
+            for _, it in ipairs(self._items) do
                 neededInnerH = neededInnerH + self._itemH
             end
             local relY = neededInnerH + 4
 
-            -- Build the element (appends to cat layout cursor as normal).
+            -- Build the element. It will be placed at the current cat cursor,
+            -- which is (cy + relY - scrollY). We must compensate for the cursor offset.
             local builtElem = builder()
             if not builtElem then return nil end
 
             local wh = builtElem._h or ELEM_H
+            -- Move all of this element's draw objects into the frame's ownership
+            -- and shift them to relY inside the frame.
+            local absY = self._y + relY - self._scrollY
+            local dyFix = absY - (builtElem._y or absY)
 
-            -- The element was placed at the current cat cursor Y.
-            -- We need to shift it so its top sits at (self._y + relY).
-            local targetAbsY = self._y + relY
-            local sourceAbsY = builtElem._y or targetAbsY
-            local dyFix = targetAbsY - sourceAbsY
-
-            -- Collect the draw objects from the last cat._elemObjs entry (the one just added).
+            -- Collect the draw objects from the last cat._elemObjs entry (the one just added)
             local lastObjs = cat._elemObjs[#cat._elemObjs]
-            local widgetObjs = {}  -- { _obj=DrawObj, _baseY=number }
+            local widgetObjs = {}
             if lastObjs then
                 for _, o in ipairs(lastObjs) do
-                    -- Shift to correct position and record the base Y for this scroll offset=0.
-                    pcall(function()
-                        o.Position = o.Position + Vector2.new(0, dyFix)
-                    end)
-                    local baseY = 0
-                    pcall(function() baseY = o.Position.Y end)
-                    table.insert(widgetObjs, {_obj=o, _baseY=baseY})
+                    table.insert(widgetObjs, o)
                     table.insert(objs, o)
-                    -- Start clipped correctly.
-                    pcall(function()
-                        o.Visible = (baseY >= self._y) and (baseY < self._y + self._h)
-                    end)
+                    -- shift vertically to align inside the scroll frame
+                    pcall(function() o.Position = o.Position + Vector2.new(0, dyFix) end)
+                    -- start clipped
+                    local oAbsY = o.Position.Y
+                    o.Visible = (oAbsY >= self._y) and (oAbsY < self._y + self._h)
                 end
-                -- Remove from cat layout management — the scroll frame owns it now.
+                -- Remove from cat layout management (we own it now)
                 table.remove(cat._elemObjs, #cat._elemObjs)
             end
 
-            -- Also patch the element descriptor Y fields used for hit-testing,
-            -- so interactions (clicks) work at the right position initially.
-            if builtElem._y      then builtElem._y      = builtElem._y      + dyFix end
-            if builtElem._ty     then builtElem._ty     = builtElem._ty     + dyFix end
+            -- Patch element descriptor Y coordinates to match actual position
+            if builtElem._y then builtElem._y = builtElem._y + dyFix end
+            if builtElem._ty then builtElem._ty = builtElem._ty + dyFix end
             if builtElem._trackY then builtElem._trackY = builtElem._trackY + dyFix end
 
             table.insert(self._widgets, {_objs=widgetObjs, _relY=relY, _h=wh, _elem=builtElem})
 
-            -- Grow scroll content height to fit the new widget.
+            -- Grow scroll content height
             local totalH = relY + wh + 8
             if totalH > self._innerH then
                 self._innerH = totalH
@@ -1189,9 +1183,7 @@ function MatchaUI.CreateWindow(opts)
             end
 
             if win.ActiveCat ~= cat then
-                for _, wd in ipairs(widgetObjs) do
-                    pcall(function() wd._obj.Visible = false end)
-                end
+                for _, o in ipairs(widgetObjs) do pcall(function() o.Visible = false end) end
             end
             return builtElem
         end
@@ -1876,32 +1868,19 @@ function MatchaUI.Run()
                         -- Reposition and clip widget draw objects every frame
                         if elem._widgets then
                             for _, widget in ipairs(elem._widgets) do
-                                -- Each object stores _baseY = its screen Y when scrollY==0.
-                                -- The current Y = _baseY - scrollY. We move the object by
-                                -- (currentY - actualCurrentY) = (_baseY - scrollY) - _obj.Position.Y
-                                local wElem = widget._elem
-                                local dy = 0
-                                -- Compute dy from first object to patch elem descriptor once
-                                if #widget._objs > 0 then
-                                    local wd0 = widget._objs[1]
+                                local baseAbsY = elem._y + widget._relY - elem._scrollY
+                                local wElem    = widget._elem
+                                local dy = baseAbsY - (wElem._y or baseAbsY)
+                                -- Shift element descriptor Y fields
+                                if wElem._y then wElem._y = wElem._y + dy end
+                                if wElem._ty then wElem._ty = wElem._ty + dy end
+                                if wElem._trackY then wElem._trackY = wElem._trackY + dy end
+                                for _, obj in ipairs(widget._objs) do
                                     pcall(function()
-                                        local targetY = wd0._baseY - elem._scrollY
-                                        dy = targetY - wd0._obj.Position.Y
+                                        obj.Position = obj.Position + Vector2.new(0, dy)
+                                        local oY = obj.Position.Y
+                                        obj.Visible = (oY >= elem._y) and (oY < elem._y + elem._h)
                                     end)
-                                end
-                                -- Shift all draw objects
-                                for _, wd in ipairs(widget._objs) do
-                                    pcall(function()
-                                        wd._obj.Position = wd._obj.Position + Vector2.new(0, dy)
-                                        local oY = wd._obj.Position.Y
-                                        wd._obj.Visible = (oY >= elem._y) and (oY < elem._y + elem._h)
-                                    end)
-                                end
-                                -- Keep hit-test Y fields in sync
-                                if wElem then
-                                    if wElem._y      then wElem._y      = wElem._y      + dy end
-                                    if wElem._ty     then wElem._ty     = wElem._ty     + dy end
-                                    if wElem._trackY then wElem._trackY = wElem._trackY + dy end
                                 end
                             end
                         end
