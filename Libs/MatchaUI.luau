@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("If this works, this is the final version, if not, not...")
+print("Hey.... guess what....")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -776,17 +776,21 @@ function MatchaUI.CreateWindow(opts)
         table.insert(objs, selTxt) table.insert(objs, arrow)
 
         -- Dropdown items (hidden by default, high Z)
+        -- Items are built at y=0 (placeholder). Their real position is computed on open
+        -- by reading the current _bg.Position so they always anchor to the actual
+        -- visual location of the dropdown box — even inside a ScrollFrame that has shifted
+        -- or scrolled the element after construction.
         local itemObjs = {}
         local dropBaseZ = baseZ + 50  -- always on top
         for i, opt in ipairs(options or {}) do
-            local iy = cy + ELEM_H + (i-1)*22
-            local iBg  = draw(makeRect(cx + cw - 130, iy, 122, 22, Theme.DropdownItem, dropBaseZ, true))
+            local iBg  = draw(makeRect(0, 0, 122, 22, Theme.DropdownItem, dropBaseZ, true))
             trackTheme("DropdownItem", iBg)
-            local iTxt = draw(makeText(opt, cx + cw - 126, iy + 4, 12, Theme.TextPrimary, dropBaseZ+1, false, true))
+            local iTxt = draw(makeText(opt, 0, 0, 12, Theme.TextPrimary, dropBaseZ+1, false, true))
             trackTheme("TextPrimary", iTxt)
             iBg.Visible  = false
             iTxt.Visible = false
-            table.insert(itemObjs, {_bg=iBg, _txt=iTxt, _value=opt, _x=cx+cw-130, _y=iy})
+            -- _x/_y start at 0; they are overwritten every time the menu opens.
+            table.insert(itemObjs, {_bg=iBg, _txt=iTxt, _value=opt, _x=0, _y=0, _idx=i})
             table.insert(objs, iBg)
             table.insert(objs, iTxt)
         end
@@ -794,6 +798,7 @@ function MatchaUI.CreateWindow(opts)
         local elem = {
             Type="Dropdown", _bg=bg, _draws=objs,
             _x=cx+cw-130, _y=cy, _w=122, _h=ELEM_H,
+            _boxX=cx+cw-130,  -- left edge of the dropdown box (for item X positioning)
             _selTxt=selTxt, _itemObjs=itemObjs, _arrow=arrow,
             _isOpen=isOpen, Selected=selected,
             Callback=callback, Options=options or {},
@@ -1872,9 +1877,33 @@ function MatchaUI.Run()
                         if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
                             -- toggle open
                             elem._isOpen = not elem._isOpen
-                            for _, item in ipairs(elem._itemObjs) do
-                                item._bg.Visible  = elem._isOpen
-                                item._txt.Visible = elem._isOpen
+                            if elem._isOpen then
+                                -- Recalculate item positions from the current _bg position so
+                                -- items always appear directly below the box regardless of whether
+                                -- the dropdown lives inside a ScrollFrame or was moved by dragging.
+                                local bgPos = elem._bg.Position
+                                local itemX  = bgPos.X + (elem._bg.Size.X - elem._w)  -- align to box right side
+                                -- If _boxX was stored use it, otherwise derive from _bg
+                                local bx = elem._boxX or bgPos.X
+                                -- Use _bg current X + offset to find box left edge
+                                -- The box is always 122px wide aligned to the right of _bg
+                                local boxLeft = bgPos.X + elem._bg.Size.X - elem._w
+                                local boxTop  = bgPos.Y + elem._h
+                                for _, item in ipairs(elem._itemObjs) do
+                                    local iy = boxTop + (item._idx - 1) * 22
+                                    item._bg.Position  = Vector2.new(boxLeft, iy)
+                                    item._txt.Position = Vector2.new(boxLeft + 4, iy + 4)
+                                    -- Update hit-test coords
+                                    item._x = boxLeft
+                                    item._y = iy
+                                    item._bg.Visible  = true
+                                    item._txt.Visible = true
+                                end
+                            else
+                                for _, item in ipairs(elem._itemObjs) do
+                                    item._bg.Visible  = false
+                                    item._txt.Visible = false
+                                end
                             end
                             elem._arrow.Text = elem._isOpen and "^" or "v"
                         elseif elem._isOpen then
