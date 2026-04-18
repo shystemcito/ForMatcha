@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Idk what to put here anymore")
+print("Happy")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -184,6 +184,20 @@ local function trackAccent(obj)
 end
 
 -- ─────────────────────────────────────────────────────────────
+-- THEME COLOR REGISTRY
+-- ─────────────────────────────────────────────────────────────
+-- Maps each Theme key to a list of Drawing objects that use it.
+-- SetThemeColor() looks up the key directly — no fragile color comparison.
+local _themeObjects = {}  -- { [themeKey] = { obj, ... } }
+
+local function trackTheme(key, obj)
+    if not _themeObjects[key] then
+        _themeObjects[key] = {}
+    end
+    table.insert(_themeObjects[key], obj)
+end
+
+-- ─────────────────────────────────────────────────────────────
 -- WINDOW CONSTRUCTOR
 -- ─────────────────────────────────────────────────────────────
 -- Returns a Window object. All elements are added to a window.
@@ -229,26 +243,33 @@ function MatchaUI.CreateWindow(opts)
 
     -- ── Main background
     local bg = draw(makeRect(wx, wy, ww, wh, Theme.Background, baseZ+1, true))
+    trackTheme("Background", bg)
 
     -- ── TopBar
     local topBar = draw(makeRect(wx, wy, ww, TOPBAR_H, Theme.TopBar, baseZ+2, true))
+    trackTheme("TopBar", topBar)
 
     -- Title text
     local titleTxt = draw(makeText(title, wx + 10, wy + 7, 14, Theme.TitleText, baseZ+3, false, true))
+    trackTheme("TitleText", titleTxt)
 
     -- Minimize button
     local minBtn  = draw(makeRect(wx + ww - 52, wy + 6, 18, 16, Theme.MinimizeBtn, baseZ+3, true))
+    trackTheme("MinimizeBtn", minBtn)
     local minTxt  = draw(makeText("-", wx + ww - 52 + 6, wy + 7, 13, Color3.fromHex("#FFFFFF"), baseZ+4, false, false))
 
     -- Close button
     local closeBtn  = draw(makeRect(wx + ww - 26, wy + 6, 18, 16, Theme.CloseBtn, baseZ+3, true))
+    trackTheme("CloseBtn", closeBtn)
     local closeTxt  = draw(makeText("X", wx + ww - 26 + 5, wy + 7, 12, Color3.fromHex("#FFFFFF"), baseZ+4, false, false))
 
     -- ── LeftBar
     local leftBar = draw(makeRect(wx, wy + TOPBAR_H, LEFTBAR_W, wh - TOPBAR_H, Theme.LeftBar, baseZ+2, true))
+    trackTheme("LeftBar", leftBar)
 
     -- ── Content area background
     local contentBg = draw(makeRect(wx + LEFTBAR_W, wy + TOPBAR_H, ww - LEFTBAR_W, wh - TOPBAR_H, Theme.ContentBg, baseZ+2, true))
+    trackTheme("ContentBg", contentBg)
 
     -- ─────────────────────────────
     -- Reposition helper (drag)
@@ -478,7 +499,9 @@ function MatchaUI.CreateWindow(opts)
         local cx   = win.X + 4
 
         local catBg = draw(makeRect(cx, cy, LEFTBAR_W - 8, CAT_H - 2, Theme.LeftBar, baseZ+3, true))
+        trackTheme("LeftBar", catBg)
         local catLbl = draw(makeText(name, cx + 8, cy + 7, 13, Theme.CategoryText, baseZ+4, false, true))
+        trackTheme("CategoryText", catLbl)
 
         local cat = {
             Name      = name,
@@ -616,6 +639,7 @@ function MatchaUI.CreateWindow(opts)
         local cy  = contentCursorY(cat)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, 20, Theme.SectionHeader, baseZ+5, true))
+        trackTheme("SectionHeader", bg)
         local lbl  = draw(makeText(labelText, cx + 6, cy + 4, 12, Theme.SectionText, baseZ+6, false, true))
         trackAccent(lbl)
         table.insert(objs, bg)   -- BUGFIX: bg must be in objs so it is shown/hidden with the category
@@ -631,7 +655,9 @@ function MatchaUI.CreateWindow(opts)
         local cy  = contentCursorY(cat)
         local objs  = {}
         local btnBg = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", btnBg)
         local btnLbl = draw(makeText(labelText, cx + cw/2, cy + ELEM_H/2 - 6, 14, Theme.TextPrimary, baseZ+6, true, false))
+        trackTheme("TextPrimary", btnLbl)
         table.insert(objs, btnBg)
         table.insert(objs, btnLbl)
         registerElem(cat, objs, ELEM_H)
@@ -652,12 +678,14 @@ function MatchaUI.CreateWindow(opts)
         local state = default or false
         local objs = {}
         local bg  = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl = draw(makeText(labelText, cx + 8, cy + ELEM_H/2 - 7, 13, Theme.TextPrimary, baseZ+6, false, true))
-        -- toggle track
+        trackTheme("TextPrimary", lbl)
         local trackW, trackH = 36, 16
         local tx = cx + cw - trackW - 8
         local ty = cy + ELEM_H/2 - trackH/2
         local track   = draw(makeRect(tx, ty, trackW, trackH, state and Theme.AccentOn or Theme.AccentOff, baseZ+6, true))
+        if not state then trackTheme("AccentOff", track) end
         -- knob
         local knobSz  = 12
         local knob    = draw(makeRect(
@@ -687,7 +715,9 @@ function MatchaUI.CreateWindow(opts)
         local val = default or min
         local objs = {}
         local bg  = draw(makeRect(cx, cy, cw, h, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl = draw(makeText(labelText, cx + 8, cy + 6, 12, Theme.TextPrimary, baseZ+6, false, true))
+        trackTheme("TextPrimary", lbl)
         local valLbl = draw(makeText(tostring(math.floor(val)), cx + cw - 30, cy + 6, 12, Theme.AccentOn, baseZ+6, false, true))
         trackAccent(valLbl)
         -- track
@@ -695,6 +725,7 @@ function MatchaUI.CreateWindow(opts)
         local trackW = cw - trackPad*2
         local trackY  = cy + h - 12
         local trackBg = draw(makeRect(cx + trackPad, trackY, trackW, 4, Theme.SliderTrack, baseZ+6, true))
+        trackTheme("SliderTrack", trackBg)
         -- fill
         local fillPct = (val - min) / math.max(max - min, 0.001)
         local fillW   = math.floor(trackW * fillPct)
@@ -705,6 +736,7 @@ function MatchaUI.CreateWindow(opts)
         local knobX = cx + trackPad + fillW - knobW/2
         local knobY = trackY - 5
         local knob  = draw(makeRect(knobX, knobY, knobW, knobH, Theme.SliderKnob, baseZ+8, true))
+        trackTheme("SliderKnob", knob)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, valLbl)
         table.insert(objs, trackBg) table.insert(objs, fillRect) table.insert(objs, knob)
         registerElem(cat, objs, h)
@@ -731,9 +763,13 @@ function MatchaUI.CreateWindow(opts)
         local isOpen   = false
         local objs     = {}
         local bg  = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl = draw(makeText(labelText, cx + 8, cy + ELEM_H/2 - 7, 12, Theme.TextSecondary, baseZ+6, false, true))
+        trackTheme("TextSecondary", lbl)
         local boxBg  = draw(makeRect(cx + cw - 130, cy + 4, 122, 22, Theme.InputBg, baseZ+6, true))
+        trackTheme("InputBg", boxBg)
         local selTxt = draw(makeText(selected, cx + cw - 126, cy + 9, 12, Theme.TextPrimary, baseZ+7, false, true))
+        trackTheme("TextPrimary", selTxt)
         local arrow  = draw(makeText("v", cx + cw - 14, cy + 9, 11, Theme.AccentOn, baseZ+7, false, false))
         trackAccent(arrow)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, boxBg)
@@ -745,7 +781,9 @@ function MatchaUI.CreateWindow(opts)
         for i, opt in ipairs(options or {}) do
             local iy = cy + ELEM_H + (i-1)*22
             local iBg  = draw(makeRect(cx + cw - 130, iy, 122, 22, Theme.DropdownItem, dropBaseZ, true))
+            trackTheme("DropdownItem", iBg)
             local iTxt = draw(makeText(opt, cx + cw - 126, iy + 4, 12, Theme.TextPrimary, dropBaseZ+1, false, true))
+            trackTheme("TextPrimary", iTxt)
             iBg.Visible  = false
             iTxt.Visible = false
             table.insert(itemObjs, {_bg=iBg, _txt=iTxt, _value=opt, _x=cx+cw-130, _y=iy})
@@ -773,9 +811,13 @@ function MatchaUI.CreateWindow(opts)
         local focused = false
         local objs = {}
         local bg  = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl = draw(makeText(labelText, cx + 8, cy + ELEM_H/2 - 7, 12, Theme.TextSecondary, baseZ+6, false, true))
+        trackTheme("TextSecondary", lbl)
         local inputBg = draw(makeRect(cx + cw - 160, cy + 4, 152, 22, Theme.InputBg, baseZ+6, true))
+        trackTheme("InputBg", inputBg)
         local inputTxt = draw(makeText(placeholder or "", cx + cw - 156, cy + 9, 12, Theme.TextDisabled, baseZ+7, false, true))
+        trackTheme("TextDisabled", inputTxt)
         local cursor   = draw(makeRect(cx + cw - 156, cy + 7, 1, 14, Theme.AccentOn, baseZ+8, true))
         trackAccent(cursor)
         cursor.Visible = false
@@ -801,14 +843,17 @@ function MatchaUI.CreateWindow(opts)
         local state = default or false
         local objs = {}
         local bg  = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl = draw(makeText(labelText, cx + 30, cy + ELEM_H/2 - 7, 13, Theme.TextPrimary, baseZ+6, false, true))
+        trackTheme("TextPrimary", lbl)
         local boxSz = 16
         local bx = cx + 8
         local by = cy + ELEM_H/2 - boxSz/2
         local box  = draw(makeRect(bx, by, boxSz, boxSz, Theme.InputBg, baseZ+6, true))
+        trackTheme("InputBg", box)
         -- border
         local boxBorder = draw(makeRect(bx, by, boxSz, boxSz, Theme.ElementBorder, baseZ+6, false))
-        boxBorder.Thickness = 1
+        trackTheme("ElementBorder", boxBorder)
         boxBorder.Filled = false
         -- check mark (filled accent square inside)
         local check = draw(makeRect(bx+3, by+3, boxSz-6, boxSz-6, Theme.AccentOn, baseZ+7, true))
@@ -836,9 +881,13 @@ function MatchaUI.CreateWindow(opts)
         local listening = false
         local objs = {}
         local bg  = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl = draw(makeText(labelText, cx + 8, cy + ELEM_H/2 - 7, 12, Theme.TextSecondary, baseZ+6, false, true))
+        trackTheme("TextSecondary", lbl)
         local kbBg  = draw(makeRect(cx + cw - 100, cy + 4, 92, 22, Theme.InputBg, baseZ+6, true))
+        trackTheme("InputBg", kbBg)
         local kbTxt = draw(makeText("[ " .. (KeyNames[key] or "?") .. " ]", cx + cw - 98, cy + 9, 12, Theme.TextPrimary, baseZ+7, false, true))
+        trackTheme("TextPrimary", kbTxt)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, kbBg) table.insert(objs, kbTxt)
         registerElem(cat, objs, ELEM_H)
         local elem = {
@@ -867,9 +916,12 @@ function MatchaUI.CreateWindow(opts)
 
         -- ── Header row ──────────────────────────────────────────────────
         local bg      = draw(makeRect(cx, cy, cw, rowH, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl     = draw(makeText(labelText, cx + 8, cy + 6, 12, Theme.TextSecondary, baseZ+6, false, true))
+        trackTheme("TextSecondary", lbl)
         local preview = draw(makeRect(cx + cw - 54, cy + 4, 22, 22, color, baseZ+7, true))
         local arrowBtn = draw(makeRect(cx + cw - 28, cy + 4, 22, 22, Theme.InputBg, baseZ+7, true))
+        trackTheme("InputBg", arrowBtn)
         local arrowTxt = draw(makeText(">", cx + cw - 22, cy + 8, 12, Theme.AccentOn, baseZ+8, false, false))
         trackAccent(arrowTxt)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, preview)
@@ -891,10 +943,12 @@ function MatchaUI.CreateWindow(opts)
         local panelH  = palH + 8    -- a little padding top+bottom
 
         local panelBg = draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.DropdownBg, baseZ+50, true))
+        trackTheme("DropdownBg", panelBg)
         panelBg.Visible = false
         table.insert(objs, panelBg)
         -- thin accent border around panel
         local panelBorder = draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.ElementBorder, baseZ+50, false))
+        trackTheme("ElementBorder", panelBorder)
         panelBorder.Filled = false panelBorder.Thickness = 1 panelBorder.Visible = false
         table.insert(objs, panelBorder)
 
@@ -1120,7 +1174,9 @@ function MatchaUI.CreateWindow(opts)
         local cy  = contentCursorY(cat)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
+        trackTheme("ElementBg", bg)
         local lbl  = draw(makeText(labelText, cx + 8, cy + ELEM_H/2 - 7, 12, Theme.TextSecondary, baseZ+6, false, true))
+        trackTheme("TextSecondary", lbl)
         -- Reserve 100px on right for the value. A cover rect with same bg color hides overflow.
         local valW   = 100
         local valX   = cx + cw - valW - 6  -- left edge of value area
@@ -1128,6 +1184,7 @@ function MatchaUI.CreateWindow(opts)
         -- SetValue always positions text relative to this fixed point so it never drifts.
         local valRightEdge = cx + cw - 8
         local valCover = draw(makeRect(cx + cw - valW - 6, cy + 1, valW + 2, ELEM_H - 2, Theme.ElementBg, baseZ+6, true))
+        trackTheme("ElementBg", valCover)
         local initStr = tostring(defaultValue or "")
         local initX   = valRightEdge - math.min(#initStr * 7, valW)
         local valTxt  = draw(makeText(initStr, initX, cy + ELEM_H/2 - 7, 13, Theme.AccentOn, baseZ+7, false, true))
@@ -1170,13 +1227,16 @@ function MatchaUI.CreateWindow(opts)
         local visH = math.min(innerH, 80)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, visH, Theme.InputBg, baseZ+5, true))
+        trackTheme("InputBg", bg)
         -- clip border
         local border = draw(makeRect(cx, cy, cw, visH, Theme.ElementBorder, baseZ+5, false))
+        trackTheme("ElementBorder", border)
         border.Filled = false
         border.Thickness = 1
         -- scrollbar track
         local sbX     = cx + cw - 8
         local sbTrack = draw(makeRect(sbX, cy, 6, visH, Theme.ScrollBar, baseZ+6, true))
+        trackTheme("ScrollBar", sbTrack)
         -- thumb (height proportional to content)
         local thumbH = math.max(20, math.floor(visH * visH / math.max(innerH, 1)))
         local thumb  = draw(makeRect(sbX, cy, 6, thumbH, Theme.ScrollThumb, baseZ+7, true))
@@ -1491,17 +1551,14 @@ function MatchaUI.SetThemeColor(key, color)
         warn("MatchaUI.SetThemeColor: unknown theme key '" .. tostring(key) .. "'")
         return
     end
-    local old = Theme[key]
     Theme[key] = color
-    -- Walk all tracked Drawing objects and repaint those whose color matches the old value.
-    -- This is a best-effort repaint; objects painted with a derived or hardcoded color
-    -- (e.g. CloseBtn red) are not automatically updated.
-    for _, obj in ipairs(_objects) do
-        pcall(function()
-            if obj.Color == old then
-                obj.Color = color
-            end
-        end)
+    -- Repaint all objects registered under this exact theme key.
+    -- No color-comparison needed — each object is directly tagged to its key.
+    local list = _themeObjects[key]
+    if list then
+        for _, obj in ipairs(list) do
+            pcall(function() obj.Color = color end)
+        end
     end
 end
 
