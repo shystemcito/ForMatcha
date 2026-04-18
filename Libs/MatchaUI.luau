@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Color picker maybe")
+print("Idk what to put here anymore")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -318,10 +318,18 @@ function MatchaUI.CreateWindow(opts)
                     sw._x = sw._x + dx
                     sw._y = sw._y + dy
                 end
-                -- Stepper buttons hit-test coords
+                -- Stepper/slider buttons hit-test coords
                 for _, btn in ipairs(elem._btnObjs or {}) do
                     btn._x = btn._x + dx
                     btn._y = btn._y + dy
+                    if btn._trackX then btn._trackX = btn._trackX + dx end
+                    if btn._knobY  then btn._knobY  = btn._knobY  + dy end
+                end
+                -- Also shift channelSliders internal track coords
+                local cs2 = elem._channelSliders or {}
+                for _, s2 in pairs(cs2) do
+                    if s2._trackX then s2._trackX = s2._trackX + dx end
+                    if s2._knobY  then s2._knobY  = s2._knobY  + dy end
                 end
             end
             -- ScrollFrame scrollbar X anchor
@@ -372,14 +380,16 @@ function MatchaUI.CreateWindow(opts)
                         elem._hueCursor.Visible = false
                         for _, sv in ipairs(elem._svRects) do sv._r.Visible = false end
                         elem._svCursor.Visible = false
-                        elem._rSlider._bg.Visible=false elem._rSlider._fill.Visible=false
-                        elem._rSlider._lbl.Visible=false elem._rSlider._val.Visible=false
-                        elem._gSlider._bg.Visible=false elem._gSlider._fill.Visible=false
-                        elem._gSlider._lbl.Visible=false elem._gSlider._val.Visible=false
-                        elem._bSlider._bg.Visible=false elem._bSlider._fill.Visible=false
-                        elem._bSlider._lbl.Visible=false elem._bSlider._val.Visible=false
+                        elem._panelBorder.Visible = false
+                        local cs = elem._channelSliders or {}
+                        for _, ch in ipairs({"R","G","B"}) do local s=cs[ch] if s then
+                            s._lbl.Visible=false s._val.Visible=false
+                            s._bg.Visible=false s._fill.Visible=false
+                            if s._knob then s._knob.Visible=false end
+                        end end
                         elem._hexLabel.Visible = false
-                        for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw.Visible = false end) end
+                        if elem._prevPatch then elem._prevPatch.Visible = false end
+                        for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw._r.Visible = false end) end
                     end
                 end
             end
@@ -428,20 +438,22 @@ function MatchaUI.CreateWindow(opts)
                         end
                         if elem.Type == "ColorPicker" then
                             elem._cpOpen = false
-                            elem._arrowTxt.Text = "v"
+                            elem._arrowTxt.Text = ">"
                             elem._panelBg.Visible = false
+                            elem._panelBorder.Visible = false
                             for _, r in ipairs(elem._hueRects) do r.Visible = false end
                             elem._hueCursor.Visible = false
                             for _, sv in ipairs(elem._svRects) do sv._r.Visible = false end
                             elem._svCursor.Visible = false
-                            elem._rSlider._bg.Visible=false elem._rSlider._fill.Visible=false
-                            elem._rSlider._lbl.Visible=false elem._rSlider._val.Visible=false
-                            elem._gSlider._bg.Visible=false elem._gSlider._fill.Visible=false
-                            elem._gSlider._lbl.Visible=false elem._gSlider._val.Visible=false
-                            elem._bSlider._bg.Visible=false elem._bSlider._fill.Visible=false
-                            elem._bSlider._lbl.Visible=false elem._bSlider._val.Visible=false
+                            local cs = elem._channelSliders or {}
+                            for _, ch in ipairs({"R","G","B"}) do local s=cs[ch] if s then
+                                s._lbl.Visible=false s._val.Visible=false
+                                s._bg.Visible=false s._fill.Visible=false
+                                if s._knob then s._knob.Visible=false end
+                            end end
                             elem._hexLabel.Visible = false
-                            for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw.Visible = false end) end
+                            if elem._prevPatch then elem._prevPatch.Visible = false end
+                            for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw._r.Visible = false end) end
                         end
                     end
                 else
@@ -553,20 +565,22 @@ function MatchaUI.CreateWindow(opts)
             -- ColorPicker: panel always starts closed
             if elem.Type == "ColorPicker" then
                 elem._cpOpen = false
-                elem._arrowTxt.Text = "v"
+                elem._arrowTxt.Text = ">"
                 elem._panelBg.Visible = false
+                elem._panelBorder.Visible = false
                 for _, r in ipairs(elem._hueRects) do r.Visible = false end
                 elem._hueCursor.Visible = false
                 for _, sv in ipairs(elem._svRects) do sv._r.Visible = false end
                 elem._svCursor.Visible = false
-                elem._rSlider._bg.Visible = false elem._rSlider._fill.Visible = false
-                elem._rSlider._lbl.Visible = false elem._rSlider._val.Visible = false
-                elem._gSlider._bg.Visible = false elem._gSlider._fill.Visible = false
-                elem._gSlider._lbl.Visible = false elem._gSlider._val.Visible = false
-                elem._bSlider._bg.Visible = false elem._bSlider._fill.Visible = false
-                elem._bSlider._lbl.Visible = false elem._bSlider._val.Visible = false
+                local cs = elem._channelSliders or {}
+                for _, ch in ipairs({"R","G","B"}) do local s=cs[ch] if s then
+                    s._lbl.Visible=false s._val.Visible=false
+                    s._bg.Visible=false s._fill.Visible=false
+                    if s._knob then s._knob.Visible=false end
+                end end
                 elem._hexLabel.Visible = false
-                for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw.Visible = false end) end
+                if elem._prevPatch then elem._prevPatch.Visible = false end
+                for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw._r.Visible = false end) end
             end
         end
     end
@@ -920,82 +934,145 @@ function MatchaUI.CreateWindow(opts)
             table.insert(objs, sw)
         end
 
-        -- ── RGB +/- steppers (right side of panel) ───────────────────────
+        -- ── RGB sliders (right side of panel) ────────────────────────────
         local function colorToHex(c)
             return string.format("#%02X%02X%02X", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
         end
 
-        local stepSize = 5   -- how much each +/- click changes the channel value
+        -- Layout: each channel row has a label, value text, and a drag slider track
+        -- Row height = 24px; 3 rows + hex/preview below
+        local chRowH   = 24
+        local slPad    = 4      -- left padding inside rs area
+        local lblW     = 12     -- "R"/"G"/"B" label width
+        local valW2    = 28     -- value "255" text width
+        local slTrackX = rsAreaX + slPad + lblW + valW2 + 4
+        local slTrackW = rsAreaW - slPad - lblW - valW2 - 4 - slPad
+        local knobW2   = 8
 
-        local rsObjs = {}   -- all objects in the stepper area (for bulk show/hide)
-        local _rSlider = {_x=0,_y=0,_w=1,_h=1, _bg=nil,_fill=nil,_lbl=nil,_val=nil}
-        local _gSlider = {_x=0,_y=0,_w=1,_h=1, _bg=nil,_fill=nil,_lbl=nil,_val=nil}
-        local _bSlider = {_x=0,_y=0,_w=1,_h=1, _bg=nil,_fill=nil,_lbl=nil,_val=nil}
-
-        -- Layout for each channel row: label | value | [-] [+]
         local channels   = {"R","G","B"}
         local channelSliders = {}
-        local btnObjs = {}   -- {_x,_y,_w,_h,_ch,_dir} for hit testing
+        local btnObjs = {}  -- kept empty; no +/- buttons any more
+
+        -- Channel colors for slider fills
+        local chFillColors = {
+            R = Color3.fromRGB(220, 60, 60),
+            G = Color3.fromRGB(60, 200, 60),
+            B = Color3.fromRGB(60, 100, 220),
+        }
+
+        local _rSlider = {_x=0,_y=0,_w=1,_h=1,_bg=nil,_fill=nil,_lbl=nil,_val=nil}
+        local _gSlider = {_x=0,_y=0,_w=1,_h=1,_bg=nil,_fill=nil,_lbl=nil,_val=nil}
+        local _bSlider = {_x=0,_y=0,_w=1,_h=1,_bg=nil,_fill=nil,_lbl=nil,_val=nil}
 
         for ci, ch in ipairs(channels) do
-            local rowY = panelY + 4 + (ci-1) * 22
-            local lbl2 = draw(makeText(ch, rsAreaX + 4, rowY + 4, 12, Theme.TextSecondary, baseZ+52, false, false))
+            local rowY = panelY + 4 + (ci-1) * chRowH
+
+            -- Channel label ("R" / "G" / "B")
+            local lbl2 = draw(makeText(ch, rsAreaX + slPad, rowY + 6, 11,
+                Theme.TextSecondary, baseZ+52, false, false))
             lbl2.Visible = false
             table.insert(objs, lbl2)
 
+            -- Numeric value display
             local initV = math.floor((ch=="R" and color.R or ch=="G" and color.G or color.B) * 255)
-            local valT  = draw(makeText(tostring(initV), rsAreaX + 18, rowY + 4, 12, Theme.TextPrimary, baseZ+52, false, false))
+            local valT  = draw(makeText(tostring(initV),
+                rsAreaX + slPad + lblW + 2, rowY + 6, 11,
+                Theme.TextPrimary, baseZ+52, false, false))
             valT.Visible = false
             table.insert(objs, valT)
 
-            -- [-] button
-            local minBg  = draw(makeRect(rsAreaX + 50, rowY + 2, 12, 14, Theme.InputBg, baseZ+52, true))
-            local minTx2 = draw(makeText("-", rsAreaX + 53, rowY + 4, 12, Theme.TextPrimary, baseZ+53, false, false))
-            minBg.Visible = false minTx2.Visible = false
-            table.insert(objs, minBg) table.insert(objs, minTx2)
+            -- Slider track background
+            local trackBg2 = draw(makeRect(slTrackX, rowY + 8, slTrackW, 4,
+                Theme.SliderTrack, baseZ+52, true))
+            trackBg2.Visible = false
+            table.insert(objs, trackBg2)
 
-            -- [+] button
-            local plusBg  = draw(makeRect(rsAreaX + 65, rowY + 2, 12, 14, Theme.InputBg, baseZ+52, true))
-            local plusTx2 = draw(makeText("+", rsAreaX + 67, rowY + 4, 12, Theme.TextPrimary, baseZ+53, false, false))
-            plusBg.Visible = false plusTx2.Visible = false
-            table.insert(objs, plusBg) table.insert(objs, plusTx2)
+            -- Slider fill (channel-colored)
+            local initPct  = initV / 255
+            local initFillW = math.max(1, math.floor(slTrackW * initPct))
+            local fillRect2 = draw(makeRect(slTrackX, rowY + 8, initFillW, 4,
+                chFillColors[ch], baseZ+53, true))
+            fillRect2.Visible = false
+            table.insert(objs, fillRect2)
 
-            local slDummy = {_bg=minBg,_fill=minBg,_lbl=lbl2,_val=valT,
-                             _x=rsAreaX,_y=rowY,_w=rsAreaW,_h=14}
-            channelSliders[ch] = {_lbl=lbl2,_val=valT,_rowY=rowY,
-                _minBg=minBg,_minTx=minTx2,_plusBg=plusBg,_plusTx=plusTx2}
-            table.insert(btnObjs, {_x=rsAreaX+50,_y=rowY+2,_w=12,_h=14,_ch=ch,_dir=-1,_bg=minBg})
-            table.insert(btnObjs, {_x=rsAreaX+65,_y=rowY+2,_w=12,_h=14,_ch=ch,_dir=1, _bg=plusBg})
+            -- Knob
+            local knobX2 = slTrackX + initFillW - knobW2/2
+            local knobY2 = rowY + 3
+            local knob2  = draw(makeRect(knobX2, knobY2, knobW2, 14,
+                Theme.SliderKnob, baseZ+54, true))
+            knob2.Visible = false
+            table.insert(objs, knob2)
 
-            if ch=="R" then _rSlider = slDummy
-            elseif ch=="G" then _gSlider = slDummy
-            else _bSlider = slDummy end
+            -- Dummy _bg/_fill/_lbl/_val references expected by legacy reset code
+            local slInfo = {
+                _lbl=lbl2, _val=valT,
+                _bg=trackBg2, _fill=fillRect2,
+                _minBg=trackBg2, _minTx=lbl2,   -- legacy keys, harmless
+                _plusBg=trackBg2, _plusTx=valT,  -- legacy keys, harmless
+                _fillRect=fillRect2, _knob=knob2,
+                _trackX=slTrackX, _trackW=slTrackW,
+                _knobY=knobY2, _rowY=rowY,
+            }
+            channelSliders[ch] = slInfo
+
+            -- Register drag hit zone (the full row strip)
+            table.insert(btnObjs, {
+                _x=slTrackX, _y=rowY+2, _w=slTrackW, _h=16,
+                _ch=ch, _isSlider=true,
+                _fillRect=fillRect2, _knob=knob2,
+                _trackX=slTrackX, _trackW=slTrackW, _knobY=knobY2,
+            })
+
+            if ch=="R" then
+                _rSlider = {_bg=trackBg2,_fill=fillRect2,_lbl=lbl2,_val=valT,
+                    _x=slTrackX,_y=rowY,_w=slTrackW,_h=14}
+            elseif ch=="G" then
+                _gSlider = {_bg=trackBg2,_fill=fillRect2,_lbl=lbl2,_val=valT,
+                    _x=slTrackX,_y=rowY,_w=slTrackW,_h=14}
+            else
+                _bSlider = {_bg=trackBg2,_fill=fillRect2,_lbl=lbl2,_val=valT,
+                    _x=slTrackX,_y=rowY,_w=slTrackW,_h=14}
+            end
         end
 
-        -- Hex label + small live preview patch (bottom of stepper area)
-        local hexLblY  = panelY + 4 + 3*22 + 4
-        local hexLabel = draw(makeText(colorToHex(color), rsAreaX + 2, hexLblY, 10, Theme.TextSecondary, baseZ+52, false, false))
+        -- Hex label + live preview patch (below the 3 channel rows)
+        local hexLblY  = panelY + 4 + 3*chRowH + 4
+        local hexLabel = draw(makeText(colorToHex(color), rsAreaX + slPad, hexLblY, 10,
+            Theme.TextSecondary, baseZ+52, false, false))
         hexLabel.Visible = false
         table.insert(objs, hexLabel)
 
-        local prevPatch = draw(makeRect(rsAreaX + 2, hexLblY + 14, rsAreaW - 4, 16, color, baseZ+52, true))
+        local prevPatch = draw(makeRect(rsAreaX + slPad, hexLblY + 14, rsAreaW - slPad*2, 14,
+            color, baseZ+52, true))
         prevPatch.Visible = false
         table.insert(objs, prevPatch)
 
         registerElem(cat, objs, rowH)
 
-        -- refreshAll: sync all UI to current color
+        -- refreshAll: always reads elem.Color (set by caller before invoking)
+        -- Uses a forward-ref table (_elemRef) so the closure can access elem after creation.
+        local _elemRef = {}
+
         local function refreshAll()
-            preview.Color    = color
-            prevPatch.Color  = color
-            hexLabel.Text    = colorToHex(color)
-            local rv = math.floor(color.R*255)
-            local gv = math.floor(color.G*255)
-            local bv = math.floor(color.B*255)
-            if channelSliders["R"] then channelSliders["R"]._val.Text = tostring(rv) end
-            if channelSliders["G"] then channelSliders["G"]._val.Text = tostring(gv) end
-            if channelSliders["B"] then channelSliders["B"]._val.Text = tostring(bv) end
-            if callback then pcall(callback, color) end
+            local c = _elemRef.Color or color
+            preview.Color   = c
+            prevPatch.Color = c
+            hexLabel.Text   = colorToHex(c)
+            local rv = math.floor(c.R*255)
+            local gv = math.floor(c.G*255)
+            local bv = math.floor(c.B*255)
+            local vals = {R=rv, G=gv, B=bv}
+            for _, ch2 in ipairs({"R","G","B"}) do
+                local s = channelSliders[ch2]
+                if s then
+                    s._val.Text = tostring(vals[ch2])
+                    local pct2 = vals[ch2] / 255
+                    local fw2  = math.max(1, math.floor(pct2 * s._trackW))
+                    s._fillRect.Size     = Vector2.new(fw2, 4)
+                    s._knob.Position     = Vector2.new(s._trackX + fw2 - knobW2/2, s._knobY)
+                end
+            end
+            if callback then pcall(callback, c) end
         end
 
         local elem = {
@@ -1005,7 +1082,7 @@ function MatchaUI.CreateWindow(opts)
             _headerX=cx, _headerY=cy, _headerW=cw, _headerH=rowH,
             _panelBg=panelBg, _panelBorder=panelBorder,
             _panelX=panelX, _panelY=panelY, _panelW=panelW, _panelH=panelH+4,
-            _hueRects={}, _hueCursor=panelBorder,   -- stubs so closeCP helper works
+            _hueRects={}, _hueCursor=panelBorder,
             _svRects={}, _svCursor=panelBorder,
             _rSlider=_rSlider, _gSlider=_gSlider, _bSlider=_bSlider,
             _hexLabel=hexLabel,
@@ -1016,6 +1093,7 @@ function MatchaUI.CreateWindow(opts)
             _prevPatch=prevPatch,
             _swatches={},
             _cpOpen=false,
+            _cpDragCh=nil,   -- currently dragged channel ("R"/"G"/"B" or nil)
             _cpDragHue=false, _cpDragR=false, _cpDragG=false, _cpDragB=false, _cpDragSV=false,
             Color=color,
             _cpHue=0, _cpSat=1, _cpVal=1,
@@ -1023,6 +1101,14 @@ function MatchaUI.CreateWindow(opts)
             _rsW=rsAreaW, _rsH=14, _rsX=rsAreaX,
             Callback=callback,
         }
+        -- Wire forward ref so refreshAll can read elem.Color
+        _elemRef.Color          = nil   -- will be kept in sync via elem.Color
+        _elemRef._channelSliders = channelSliders
+        -- Override _refreshAll with a closure that always reads elem.Color
+        elem._refreshAll = function()
+            _elemRef.Color = elem.Color
+            refreshAll()
+        end
         registerElemDesc(cat, elem)
         return elem
     end
@@ -1721,8 +1807,8 @@ function MatchaUI.Run()
                                 local s = cs[ch]
                                 if s then
                                     s._lbl.Visible=state s._val.Visible=state
-                                    s._minBg.Visible=state s._minTx.Visible=state
-                                    s._plusBg.Visible=state s._plusTx.Visible=state
+                                    s._bg.Visible=state s._fill.Visible=state
+                                    s._knob.Visible=state
                                 end
                             end
                             elem._hexLabel.Visible  = state
@@ -1759,23 +1845,35 @@ function MatchaUI.Run()
                                 end
                             end
 
-                            -- +/- stepper buttons
-                            if _mouseJustDown then
+                            -- RGB channel sliders: start drag on mousedown, update on hold
+                            if _mouseJustDown and elem._cpDragCh == nil then
                                 for _, btn in ipairs(elem._btnObjs or {}) do
-                                    if inBounds(mPos.X, mPos.Y, btn._x, btn._y, btn._w, btn._h) then
-                                        local c  = elem.Color
-                                        local rv = math.floor(c.R*255)
-                                        local gv = math.floor(c.G*255)
-                                        local bv = math.floor(c.B*255)
-                                        local step = 5
-                                        if btn._ch == "R" then rv = math.max(0, math.min(255, rv + btn._dir * step))
-                                        elseif btn._ch == "G" then gv = math.max(0, math.min(255, gv + btn._dir * step))
-                                        else bv = math.max(0, math.min(255, bv + btn._dir * step)) end
-                                        elem.Color = Color3.fromRGB(rv, gv, bv)
-                                        elem._refreshAll()
+                                    if btn._isSlider and inBounds(mPos.X, mPos.Y, btn._x, btn._y, btn._w, btn._h) then
+                                        elem._cpDragCh  = btn._ch
+                                        elem._cpDragBtn = btn
                                         break
                                     end
                                 end
+                            end
+
+                            -- Update dragged channel slider every frame while mouse held
+                            if elem._cpDragCh and mouse1 then
+                                local btn2 = elem._cpDragBtn
+                                local relX = math.max(0, math.min(mPos.X - btn2._trackX, btn2._trackW))
+                                local pct2 = relX / btn2._trackW
+                                local newV = math.floor(pct2 * 255)
+                                local c = elem.Color
+                                local rv = math.floor(c.R*255)
+                                local gv = math.floor(c.G*255)
+                                local bv = math.floor(c.B*255)
+                                if elem._cpDragCh == "R" then rv = newV
+                                elseif elem._cpDragCh == "G" then gv = newV
+                                else bv = newV end
+                                elem.Color = Color3.fromRGB(rv, gv, bv)
+                                elem._refreshAll()
+                            elseif not mouse1 then
+                                elem._cpDragCh  = nil
+                                elem._cpDragBtn = nil
                             end
                         end
                     end
