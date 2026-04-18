@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Rollback :(")
+print("If this works, this is the final version, if not, not...")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -1250,6 +1250,11 @@ function MatchaUI.CreateWindow(opts)
         table.insert(objs, sbTrack) table.insert(objs, thumb)
         registerElem(cat, objs, visH)
 
+        -- BUG 2 FIX: content width leaves room for the scrollbar so widgets never overlap it.
+        -- 10 = 8px scrollbar track + 2px inner padding gap.
+        local contentPadRight = 10
+        local innerCW = cw - contentPadRight
+
         local elem = {
             Type="ScrollFrame", _bg=bg, _draws=objs,
             _x=cx, _y=cy, _w=cw, _h=visH,
@@ -1269,6 +1274,8 @@ function MatchaUI.CreateWindow(opts)
             local rowIdx = #self._items
             local relY   = rowIdx * self._itemH + 4
             local absY   = self._y + relY
+            -- BUG 2 FIX: use innerCW (captured from outer scope) so text never overlaps the scrollbar.
+            local _ = innerCW  -- referenced for closure
             local txt    = draw(makeText(
                 text, self._x + 6, absY, 12, Theme.TextPrimary, baseZ+8, false, false
             ))
@@ -1324,16 +1331,41 @@ function MatchaUI.CreateWindow(opts)
             local absY = self._y + relY - self._scrollY
             local dyFix = absY - (builtElem._y or absY)
 
+            -- BUG 2 FIX: shrink widget width to innerCW (content area excluding scrollbar).
+            -- This prevents buttons, sliders, etc. from visually overlapping the scrollbar.
+            local dxW = innerCW - (builtElem._w or cw)
+            if dxW < 0 then
+                -- Only shrink, never expand. Apply to the element's own _bg draw object.
+                if builtElem._bg then
+                    pcall(function()
+                        local s = builtElem._bg.Size
+                        builtElem._bg.Size = Vector2.new(s.X + dxW, s.Y)
+                    end)
+                end
+                builtElem._w = (builtElem._w or cw) + dxW
+            end
+
             -- Mark this element as living inside a ScrollFrame so the main interaction
             -- loop uses the frame's visibility, not elem._bg.Visible, as the gate.
             builtElem._inScrollFrame = true
 
-            -- Build a set of ColorPicker panel objects that must never be clipped by
-            -- the ScrollFrame — their visibility is controlled by _cpOpen exclusively.
+            -- Build a set of objects that must never be force-shown/hidden by the clipping
+            -- pass. This includes:
+            --   • ColorPicker panel objects (their visibility is controlled by _cpOpen).
+            --   • Dropdown item objects (their visibility is controlled by _isOpen).
+            -- BUG 3 FIX: Dropdown items must be in this set so the clipping loop never
+            -- makes them visible while their parent is closed.
             local panelObjSet = {}
             if builtElem._panelObjs then
                 for _, po in ipairs(builtElem._panelObjs) do
                     panelObjSet[po] = true
+                end
+            end
+            -- Dropdown popup items
+            if builtElem.Type == "Dropdown" and builtElem._itemObjs then
+                for _, item in ipairs(builtElem._itemObjs) do
+                    if item._bg  then panelObjSet[item._bg]  = true end
+                    if item._txt then panelObjSet[item._txt] = true end
                 end
             end
 
@@ -1345,8 +1377,8 @@ function MatchaUI.CreateWindow(opts)
                     table.insert(widgetObjs, o)
                     table.insert(objs, o)
                     if panelObjSet[o] then
-                        -- Panel objects float outside the frame — never shift, never clip.
-                        -- Leave them at Visible=false; _cpOpen toggle controls them.
+                        -- Panel/popup objects float outside the frame — never shift, never clip.
+                        -- Leave them at Visible=false; open/close toggle controls them.
                     else
                         -- shift vertically to align inside the scroll frame
                         pcall(function() o.Position = o.Position + Vector2.new(0, dyFix) end)
@@ -1363,6 +1395,14 @@ function MatchaUI.CreateWindow(opts)
             if builtElem._y then builtElem._y = builtElem._y + dyFix end
             if builtElem._ty then builtElem._ty = builtElem._ty + dyFix end
             if builtElem._trackY then builtElem._trackY = builtElem._trackY + dyFix end
+
+            -- BUG 4 FIX: also patch Dropdown item hit-test _y to match the shifted position.
+            -- Without this, clicking items fires at wrong Y coords that never match the mouse.
+            if builtElem.Type == "Dropdown" and builtElem._itemObjs then
+                for _, item in ipairs(builtElem._itemObjs) do
+                    if item._y then item._y = item._y + dyFix end
+                end
+            end
 
             table.insert(self._widgets, {_objs=widgetObjs, _relY=relY, _h=wh, _elem=builtElem, _panelObjSet=panelObjSet})
 
@@ -1765,6 +1805,29 @@ function MatchaUI.Run()
                     --   clicks on scrolled-out widgets.
                     if not elem._inScrollFrame then
                         if not elem._bg or not elem._bg.Visible then continue end
+                    else
+                        -- BUG 1 FIX: for widgets inside a ScrollFrame, find the owning frame
+                        -- and gate all interaction on the mouse being inside the frame's
+                        -- visible bounds. Without this, elements respond to clicks even when
+                        -- they are scrolled out of view (and thus invisible).
+                        local inFrame = false
+                        for _, wElemWrap in ipairs(win._elements) do
+                            if wElemWrap.Type == "ScrollFrame" then
+                                for _, widget in ipairs(wElemWrap._widgets) do
+                                    if widget._elem == elem then
+                                        -- Check mouse is inside the ScrollFrame's visible rect
+                                        inFrame = inBounds(mPos.X, mPos.Y,
+                                            wElemWrap._x, wElemWrap._y,
+                                            wElemWrap._w - 8, wElemWrap._h)
+                                        break
+                                    end
+                                end
+                                if inFrame ~= false then break end
+                            end
+                        end
+                        -- inFrame is false only when found but outside bounds; nil means not
+                        -- found (shouldn't happen). Either way, skip if not within frame.
+                        if not inFrame then continue end
                     end
 
                     -- BUTTON
@@ -2061,10 +2124,34 @@ function MatchaUI.Run()
                                 if wElem._y then wElem._y = wElem._y + dy end
                                 if wElem._ty then wElem._ty = wElem._ty + dy end
                                 if wElem._trackY then wElem._trackY = wElem._trackY + dy end
+                                -- BUG 4 FIX: keep Dropdown item hit-test _y in sync with scroll.
+                                -- Without this, clicking options fires at the original Y coords
+                                -- from when the widget was first built, ignoring scroll position.
+                                if wElem.Type == "Dropdown" and wElem._itemObjs then
+                                    for _, item in ipairs(wElem._itemObjs) do
+                                        if item._y then item._y = item._y + dy end
+                                    end
+                                end
+                                -- BUG 4 FIX: keep ColorPicker button/channel-slider hit-test
+                                -- coords in sync with scroll so they fire at the correct position.
+                                if wElem.Type == "ColorPicker" then
+                                    if wElem._headerY then wElem._headerY = wElem._headerY + dy end
+                                    if wElem._arrowY  then wElem._arrowY  = wElem._arrowY  + dy end
+                                    for _, btn in ipairs(wElem._btnObjs or {}) do
+                                        if btn._y then btn._y = btn._y + dy end
+                                        if btn._knobY then btn._knobY = btn._knobY + dy end
+                                    end
+                                    local cs2 = wElem._channelSliders or {}
+                                    for _, s2 in pairs(cs2) do
+                                        if s2._knobY then s2._knobY = s2._knobY + dy end
+                                        if s2._rowY  then s2._rowY  = s2._rowY  + dy end
+                                    end
+                                end
                                 local pSet = widget._panelObjSet or {}
                                 for _, obj in ipairs(widget._objs) do
-                                    -- Panel objects (ColorPicker popup) float outside the frame.
-                                    -- Skip them here — _cpOpen toggle manages their visibility.
+                                    -- Panel/popup objects (ColorPicker popup, Dropdown items) float
+                                    -- outside the frame. Skip them here — open/close toggle manages
+                                    -- their visibility; we must never force them visible via clipping.
                                     if pSet[obj] then continue end
                                     pcall(function()
                                         obj.Position = obj.Position + Vector2.new(0, dy)
