@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Mama mia")
+print("No se lo que hago pero luzco genial haciendolo")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -77,6 +77,11 @@ local function makeRect(x, y, w, h, color, zIndex, filled, thickness)
     return r
 end
 
+-- Active font — changed globally via MatchaUI.SetFont()
+local _currentFont = Drawing.Fonts.Monospace
+-- All Text Drawing objects created by makeText, so SetFont can repaint them
+local _textObjects = {}
+
 local function makeText(text, x, y, size, color, zIndex, centered, outline)
     local t = newDraw("Text")
     t.Text         = tostring(text)
@@ -86,9 +91,10 @@ local function makeText(text, x, y, size, color, zIndex, centered, outline)
     t.ZIndex       = zIndex or 11
     t.Center       = centered or false
     t.Outline      = (outline ~= false)
-    t.Font         = Drawing.Fonts.Monospace
+    t.Font         = _currentFont
     t.Transparency = 1
     t.Visible      = true
+    table.insert(_textObjects, t)
     return t
 end
 
@@ -291,11 +297,32 @@ function MatchaUI.CreateWindow(opts)
                     if item._y then item._y = item._y + dy end
                 end
             end
-            -- ColorPicker swatches
+            -- ColorPicker panel objects (shift header + all panel draw objects)
             if elem._swatches then
                 for _, sw in ipairs(elem._swatches) do
                     if sw._x then sw._x = sw._x + dx end
                     if sw._y then sw._y = sw._y + dy end
+                end
+            end
+            -- New HSV ColorPicker panel fields
+            if elem.Type == "ColorPicker" then
+                if elem._headerX then elem._headerX = elem._headerX + dx end
+                if elem._headerY then elem._headerY = elem._headerY + dy end
+                if elem._arrowX  then elem._arrowX  = elem._arrowX  + dx end
+                if elem._arrowY  then elem._arrowY  = elem._arrowY  + dy end
+                if elem._hueBarX then elem._hueBarX = elem._hueBarX + dx end
+                if elem._hueBarY then elem._hueBarY = elem._hueBarY + dy end
+                if elem._svX     then elem._svX     = elem._svX     + dx end
+                if elem._svY     then elem._svY     = elem._svY     + dy end
+                if elem._panelY  then elem._panelY  = elem._panelY  + dy end
+                if elem._rsX     then elem._rsX     = elem._rsX     + dx end
+                if elem._rSlider then
+                    elem._rSlider._x = elem._rSlider._x + dx
+                    elem._rSlider._y = elem._rSlider._y + dy
+                    elem._gSlider._x = elem._gSlider._x + dx
+                    elem._gSlider._y = elem._gSlider._y + dy
+                    elem._bSlider._x = elem._bSlider._x + dx
+                    elem._bSlider._y = elem._bSlider._y + dy
                 end
             end
             -- ScrollFrame scrollbar X anchor
@@ -759,45 +786,218 @@ function MatchaUI.CreateWindow(opts)
         return elem
     end
 
-    -- ── COLOR PICKER  (simplified: preset swatches + hex display)
+    -- ── COLOR PICKER  (HSV wheel + SV square + RGB sliders + live preview)
+    -- Layout (collapsed header row + expanded panel toggled on click):
+    --   Row  : [Label]  [Preview swatch]  [▼ button]
+    --   Panel: Hue ring (drawn as segments), SV square, R/G/B sliders
     local function addColorPicker(cat, labelText, defaultColor, callback)
         local cx  = contentX()
         local cw  = contentW()
         local cy  = contentCursorY(cat)
-        local h   = ELEM_H + 26
+        local rowH = ELEM_H
+        local panelH = 160      -- height of the expanded panel
         local color = defaultColor or Color3.fromRGB(255, 100, 100)
         local objs = {}
-        local bg   = draw(makeRect(cx, cy, cw, h, Theme.ElementBg, baseZ+5, true))
+
+        -- ── Header row ──────────────────────────────────────────────────
+        local bg   = draw(makeRect(cx, cy, cw, rowH, Theme.ElementBg, baseZ+5, true))
         local lbl  = draw(makeText(labelText, cx + 8, cy + 6, 12, Theme.TextSecondary, baseZ+6, false, true))
-        -- Preview swatch
-        local preview = draw(makeRect(cx + cw - 30, cy + 4, 22, 22, color, baseZ+7, true))
-        -- Preset swatches
-        local presets = {
-            Color3.fromRGB(229,69,96),   -- red-ish accent
-            Color3.fromRGB(240,165,0),   -- amber
-            Color3.fromRGB(0,200,100),   -- green
-            Color3.fromRGB(60,130,220),  -- blue
-            Color3.fromRGB(180,60,220),  -- purple
-            Color3.fromRGB(255,255,255), -- white
-            Color3.fromRGB(120,120,120), -- grey
-            Color3.fromRGB(0,0,0),       -- black
-        }
-        local swatchObjs = {}
-        local swSz = 14
-        for i, pc in ipairs(presets) do
-            local sx = cx + 8 + (i-1) * (swSz + 4)
-            local sy = cy + h - swSz - 6
-            local sw = draw(makeRect(sx, sy, swSz, swSz, pc, baseZ+7, true))
-            table.insert(swatchObjs, {_rect=sw, _color=pc, _x=sx, _y=sy, _sz=swSz})
-            table.insert(objs, sw)
-        end
+        local preview = draw(makeRect(cx + cw - 54, cy + 4, 22, 22, color, baseZ+7, true))
+        local arrowBtn = draw(makeRect(cx + cw - 28, cy + 4, 22, 22, Theme.InputBg, baseZ+7, true))
+        local arrowTxt = draw(makeText("v", cx + cw - 21, cy + 8, 12, Theme.AccentOn, baseZ+8, false, false))
+        trackAccent(arrowTxt)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, preview)
-        registerElem(cat, objs, h)
+        table.insert(objs, arrowBtn) table.insert(objs, arrowTxt)
+
+        -- ── Panel background (hidden by default) ────────────────────────
+        local panelBg = draw(makeRect(cx, cy + rowH, cw, panelH, Theme.DropdownBg, baseZ+5, true))
+        panelBg.Visible = false
+        table.insert(objs, panelBg)
+
+        -- Helper: HSV → Color3
+        local function hsv2rgb(h, s, v)
+            if s == 0 then return Color3.fromRGB(v*255, v*255, v*255) end
+            local i = math.floor(h * 6)
+            local f = h * 6 - i
+            local p = v * (1 - s)
+            local q = v * (1 - f * s)
+            local t = v * (1 - (1 - f) * s)
+            i = i % 6
+            local r,g,b
+            if i==0 then r,g,b=v,t,p
+            elseif i==1 then r,g,b=q,v,p
+            elseif i==2 then r,g,b=p,v,t
+            elseif i==3 then r,g,b=p,q,v
+            elseif i==4 then r,g,b=t,p,v
+            else r,g,b=v,p,q end
+            return Color3.fromRGB(r*255, g*255, b*255)
+        end
+
+        -- Helper: Color3 → HSV
+        local function rgb2hsv(c)
+            local r,g,b = c.R, c.G, c.B
+            local maxC = math.max(r,g,b)
+            local minC = math.min(r,g,b)
+            local d = maxC - minC
+            local h2, s2, v2
+            v2 = maxC
+            s2 = maxC == 0 and 0 or d/maxC
+            if d == 0 then h2 = 0
+            elseif maxC == r then h2 = ((g-b)/d) % 6
+            elseif maxC == g then h2 = (b-r)/d + 2
+            else h2 = (r-g)/d + 4 end
+            h2 = h2 / 6
+            return h2, s2, v2
+        end
+
+        local initH, initS, initV = rgb2hsv(color)
+        local _cpHue = initH
+        local _cpSat = initS
+        local _cpVal = initV
+
+        -- ── Hue bar (horizontal gradient using colored segments) ─────────
+        local hueBarH = 14
+        local hueBarW = cw - 16
+        local hueBarX = cx + 8
+        local hueBarY = cy + rowH + 8
+        local hueSeg  = 24   -- number of hue segments
+        local hueRects = {}
+        for i = 0, hueSeg - 1 do
+            local hFrac = i / hueSeg
+            local segW  = math.ceil(hueBarW / hueSeg)
+            local segX  = hueBarX + math.floor(i * hueBarW / hueSeg)
+            local sr    = draw(makeRect(segX, hueBarY, segW + 1, hueBarH, hsv2rgb(hFrac, 1, 1), baseZ+6, true))
+            sr.Visible = false
+            table.insert(hueRects, sr)
+            table.insert(objs, sr)
+        end
+        -- Hue cursor (thin white line)
+        local hueCursorX = hueBarX + math.floor(_cpHue * hueBarW) - 1
+        local hueCursor  = draw(makeRect(hueCursorX, hueBarY - 2, 3, hueBarH + 4, Color3.fromRGB(255,255,255), baseZ+7, true))
+        hueCursor.Visible = false
+        table.insert(objs, hueCursor)
+
+        -- ── SV square (Value = brightness rows, Sat = columns) ───────────
+        local svSz    = 60
+        local svX     = cx + 8
+        local svY     = hueBarY + hueBarH + 6
+        local svRows  = 6
+        local svCols  = 8
+        local svCellW = math.ceil(svSz * 1.5 / svCols)
+        local svCellH = math.ceil(svSz / svRows)
+        local svRects = {}
+        for row = 0, svRows - 1 do
+            for col = 0, svCols - 1 do
+                local sv2 = 1 - row / (svRows - 1)
+                local ss2 = col / (svCols - 1)
+                local cellX = svX + col * svCellW
+                local cellY = svY + row * svCellH
+                local sr    = draw(makeRect(cellX, cellY, svCellW + 1, svCellH + 1, hsv2rgb(_cpHue, ss2, sv2), baseZ+6, true))
+                sr.Visible = false
+                table.insert(svRects, {_r=sr, _s=ss2, _v=sv2})
+                table.insert(objs, sr)
+            end
+        end
+        -- SV cursor dot
+        local svCurDotX = svX + math.floor(_cpSat * (svSz*1.5 - svCellW))
+        local svCurDotY = svY + math.floor((1 - _cpVal) * (svSz - svCellH))
+        local svCursor  = draw(makeRect(svCurDotX - 3, svCurDotY - 3, 7, 7, Color3.fromRGB(255,255,255), baseZ+8, false))
+        svCursor.Filled    = false
+        svCursor.Thickness = 2
+        svCursor.Visible   = false
+        table.insert(objs, svCursor)
+
+        -- ── RGB sliders (compact, right of SV square) ────────────────────
+        local rsX  = svX + math.ceil(svSz * 1.5) + 10
+        local rsW  = cw - (rsX - cx) - 8
+        local rsH  = 10
+        local rY   = svY
+        local gY   = svY + rsH + 8
+        local bY   = svY + (rsH + 8) * 2
+        local function makeRGBSlider(sy, clr, lchar)
+            local trkBg = draw(makeRect(rsX, sy, rsW, rsH, Theme.SliderTrack, baseZ+6, true))
+            local fill  = draw(makeRect(rsX, sy, math.max(1, rsW * clr), rsH, Color3.fromRGB(
+                lchar=="R" and 200 or 60, lchar=="G" and 200 or 60, lchar=="B" and 200 or 60
+            ), baseZ+7, true))
+            local lbl2  = draw(makeText(lchar, rsX - 10, sy - 1, 11, Theme.TextSecondary, baseZ+7, false, false))
+            local valT  = draw(makeText(tostring(math.floor(clr*255)), rsX + rsW + 2, sy - 1, 10, Theme.TextSecondary, baseZ+7, false, false))
+            trkBg.Visible=false fill.Visible=false lbl2.Visible=false valT.Visible=false
+            table.insert(objs,trkBg) table.insert(objs,fill) table.insert(objs,lbl2) table.insert(objs,valT)
+            return {_bg=trkBg,_fill=fill,_lbl=lbl2,_val=valT, _x=rsX,_y=sy,_w=rsW,_h=rsH}
+        end
+        local rSlider = makeRGBSlider(rY, color.R, "R")
+        local gSlider = makeRGBSlider(gY, color.G, "G")
+        local bSlider = makeRGBSlider(bY, color.B, "B")
+
+        -- HEX label
+        local function colorToHex(c)
+            return string.format("#%02X%02X%02X", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
+        end
+        local hexLabel = draw(makeText(colorToHex(color), rsX, bY + rsH + 6, 11, Theme.TextSecondary, baseZ+7, false, false))
+        hexLabel.Visible = false
+        table.insert(objs, hexLabel)
+
+        registerElem(cat, objs, rowH)
+
+        -- Internal update: rebuild SV square colors when hue changes
+        local function refreshSVSquare()
+            for _, sv in ipairs(svRects) do
+                sv._r.Color = hsv2rgb(_cpHue, sv._s, sv._v)
+            end
+        end
+        local function refreshAll()
+            local c = hsv2rgb(_cpHue, _cpSat, _cpVal)
+            color = c
+            preview.Color = c
+            -- update rgb sliders fill widths and value labels
+            rSlider._fill.Size = Vector2.new(math.max(1, rsW * c.R), rsH)
+            gSlider._fill.Size = Vector2.new(math.max(1, rsW * c.G), rsH)
+            bSlider._fill.Size = Vector2.new(math.max(1, rsW * c.B), rsH)
+            rSlider._val.Text = tostring(math.floor(c.R * 255))
+            gSlider._val.Text = tostring(math.floor(c.G * 255))
+            bSlider._val.Text = tostring(math.floor(c.B * 255))
+            hexLabel.Text = colorToHex(c)
+            -- hue cursor
+            local hcx = hueBarX + math.floor(_cpHue * hueBarW) - 1
+            hueCursor.Position = Vector2.new(hcx, hueBarY - 2)
+            -- sv cursor
+            local svW2 = svSz * 1.5 - svCellW
+            local svH2 = svSz - svCellH
+            local scx  = svX + math.floor(_cpSat * svW2) - 3
+            local scy  = svY + math.floor((1 - _cpVal) * svH2) - 3
+            svCursor.Position = Vector2.new(scx, scy)
+            if callback then pcall(callback, c) end
+        end
+
+        local _cpOpen    = false
+        local _cpDragHue = false
+        local _cpDragR   = false
+        local _cpDragG   = false
+        local _cpDragB   = false
+        local _cpDragSV  = false
+
         local elem = {
             Type="ColorPicker", _bg=bg, _draws=objs,
-            _x=cx, _y=cy, _w=cw, _h=h,
-            _preview=preview, _swatches=swatchObjs,
-            Color=color, Callback=callback,
+            _x=cx+cw-54, _y=cy, _w=54, _h=rowH,
+            _arrowX=cx+cw-28, _arrowY=cy+4, _arrowW=22, _arrowH=22,
+            _headerX=cx, _headerY=cy, _headerW=cw, _headerH=rowH,
+            _panelBg=panelBg,
+            _panelY=cy+rowH, _panelH=panelH,
+            _hueBarX=hueBarX, _hueBarY=hueBarY, _hueBarW=hueBarW, _hueBarH=hueBarH,
+            _hueRects=hueRects, _hueCursor=hueCursor,
+            _svRects=svRects, _svCursor=svCursor,
+            _svX=svX, _svY=svY, _svSz=svSz, _svCellW=svCellW, _svCellH=svCellH,
+            _rSlider=rSlider, _gSlider=gSlider, _bSlider=bSlider,
+            _hexLabel=hexLabel,
+            _preview=preview, _arrowTxt=arrowTxt,
+            _swatches={},   -- kept for reposition compatibility
+            _cpOpen=false,
+            _cpDragHue=false, _cpDragR=false, _cpDragG=false, _cpDragB=false, _cpDragSV=false,
+            Color=color,
+            _cpHue=_cpHue, _cpSat=_cpSat, _cpVal=_cpVal,
+            _refreshSV=refreshSVSquare, _refreshAll=refreshAll,
+            _rsW=rsW, _rsH=rsH, _rsX=rsX,
+            Callback=callback,
         }
         registerElemDesc(cat, elem)
         return elem
@@ -849,11 +1049,10 @@ function MatchaUI.CreateWindow(opts)
     end
 
     -- ── SCROLLING FRAME
-    -- visH  : visible height of the frame (px). innerH auto-grows as items are added.
-    -- Scrolling is controlled exclusively by dragging the scrollbar thumb.
-    -- Use elem:AddItem(text) after creation to populate rows.
-    -- Each frame in the main loop re-positions item text objects to reflect _scrollY,
-    -- and hides rows that fall outside the visible area (manual clip).
+    -- visH  : visible height of the frame (px). innerH auto-grows as widgets are added.
+    -- Supports both text rows (AddItem) and full UI elements (AddWidget).
+    -- Scrolling is controlled by dragging the scrollbar thumb or content drag.
+    -- Each frame in the main loop re-positions and clips all child objects.
     local function addScrollFrame(cat, innerH, callback)
         local cx   = contentX()
         local cw   = contentW()
@@ -884,17 +1083,17 @@ function MatchaUI.CreateWindow(opts)
             _innerH=innerH, _scrollY=0,
             _thumbDragging=false, _thumbDragOffY=0,
             _contentDragging=false, _contentDragStartY=0, _contentDragStartScroll=0,
-            _items={},   -- { _txt=DrawObj, _relY=number }
+            _items={},   -- { _txt=DrawObj, _relY=number }  (text rows)
+            _widgets={}, -- { _objs={DrawObj,...}, _relY=number, _h=number }  (UI widgets)
             _itemH=18,
             Callback=callback,
         }
 
-        -- AddItem: add a labelled text row into the scroll frame.
-        -- The main loop re-clips and repositions item labels each frame.
+        -- AddItem: add a labelled text row into the scroll frame (legacy API).
         function elem:AddItem(text)
             local rowIdx = #self._items
             local relY   = rowIdx * self._itemH + 4
-            local absY   = self._y + relY  -- initial position (no scroll yet)
+            local absY   = self._y + relY
             local txt    = draw(makeText(
                 text, self._x + 6, absY, 12, Theme.TextPrimary, baseZ+8, false, false
             ))
@@ -909,9 +1108,84 @@ function MatchaUI.CreateWindow(opts)
                 self._thumbH = newThH
                 self._thumb.Size = Vector2.new(6, newThH)
             end
-            -- Hide immediately if category not yet active
             if win.ActiveCat ~= cat then txt.Visible = false end
             return txt
+        end
+
+        -- AddWidget: embed a full UI element (Button, Toggle, Checkbox, Slider, Dropdown…)
+        -- inside the scroll frame. The element is built normally via the cat builders, but
+        -- its draw objects are detached from the category layout and owned by the frame.
+        -- @param builder   function()  — a zero-argument closure that calls the add* function
+        --                                and returns the element descriptor.
+        -- @returns the element descriptor (same as calling the builder directly).
+        --
+        -- Usage:
+        --   scrollFrame:AddWidget(function()
+        --       return Window.AddButton(catFoo, "My Button", callback)
+        --   end)
+        --
+        -- The widget is positioned relative to the scroll frame's content area and will
+        -- scroll with the frame. Its height is taken from elem._h on the descriptor.
+        function elem:AddWidget(builder)
+            -- Temporarily adjust the category cursor so the element lands inside us.
+            -- We compute the desired relY (distance from top of scroll frame content).
+            local neededInnerH = 0
+            for _, w in ipairs(self._widgets) do
+                neededInnerH = neededInnerH + w._h + 2
+            end
+            for _, it in ipairs(self._items) do
+                neededInnerH = neededInnerH + self._itemH
+            end
+            local relY = neededInnerH + 4
+
+            -- Build the element. It will be placed at the current cat cursor,
+            -- which is (cy + relY - scrollY). We must compensate for the cursor offset.
+            local builtElem = builder()
+            if not builtElem then return nil end
+
+            local wh = builtElem._h or ELEM_H
+            -- Move all of this element's draw objects into the frame's ownership
+            -- and shift them to relY inside the frame.
+            local absY = self._y + relY - self._scrollY
+            local dyFix = absY - (builtElem._y or absY)
+
+            -- Collect the draw objects from the last cat._elemObjs entry (the one just added)
+            local lastObjs = cat._elemObjs[#cat._elemObjs]
+            local widgetObjs = {}
+            if lastObjs then
+                for _, o in ipairs(lastObjs) do
+                    table.insert(widgetObjs, o)
+                    table.insert(objs, o)
+                    -- shift vertically to align inside the scroll frame
+                    pcall(function() o.Position = o.Position + Vector2.new(0, dyFix) end)
+                    -- start clipped
+                    local oAbsY = o.Position.Y
+                    o.Visible = (oAbsY >= self._y) and (oAbsY < self._y + self._h)
+                end
+                -- Remove from cat layout management (we own it now)
+                table.remove(cat._elemObjs, #cat._elemObjs)
+            end
+
+            -- Patch element descriptor Y coordinates to match actual position
+            if builtElem._y then builtElem._y = builtElem._y + dyFix end
+            if builtElem._ty then builtElem._ty = builtElem._ty + dyFix end
+            if builtElem._trackY then builtElem._trackY = builtElem._trackY + dyFix end
+
+            table.insert(self._widgets, {_objs=widgetObjs, _relY=relY, _h=wh, _elem=builtElem})
+
+            -- Grow scroll content height
+            local totalH = relY + wh + 8
+            if totalH > self._innerH then
+                self._innerH = totalH
+                local newThH = math.max(20, math.floor(self._h * self._h / self._innerH))
+                self._thumbH = newThH
+                self._thumb.Size = Vector2.new(6, newThH)
+            end
+
+            if win.ActiveCat ~= cat then
+                for _, o in ipairs(widgetObjs) do pcall(function() o.Visible = false end) end
+            end
+            return builtElem
         end
 
         registerElemDesc(cat, elem)
@@ -1094,9 +1368,63 @@ function MatchaUI.SetAccentColor(color)
     end
 end
 
+-- ─────────────────────────────────────────────────────────────
+-- SET THEME COLOR
+-- ─────────────────────────────────────────────────────────────
+-- Change any Theme key (Background, TopBar, LeftBar, TextPrimary, etc.)
+-- and repaint all currently-visible Drawing objects that use that color.
+-- For accent-linked keys (AccentOn, SliderFill, etc.) prefer SetAccentColor.
+-- @param key    string   — Theme table key (e.g. "Background", "TopBar")
+-- @param color  Color3   — new color value
+function MatchaUI.SetThemeColor(key, color)
+    if Theme[key] == nil then
+        warn("MatchaUI.SetThemeColor: unknown theme key '" .. tostring(key) .. "'")
+        return
+    end
+    local old = Theme[key]
+    Theme[key] = color
+    -- Walk all tracked Drawing objects and repaint those whose color matches the old value.
+    -- This is a best-effort repaint; objects painted with a derived or hardcoded color
+    -- (e.g. CloseBtn red) are not automatically updated.
+    for _, obj in ipairs(_objects) do
+        pcall(function()
+            if obj.Color == old then
+                obj.Color = color
+            end
+        end)
+    end
+end
+
+-- ─────────────────────────────────────────────────────────────
+-- SET FONT
+-- ─────────────────────────────────────────────────────────────
+-- Change the global font for all text Drawing objects immediately.
+-- Available font names: UI, System, SystemBold, Minecraft, Monospace, Pixel, Fortnite
+-- @param fontName  string  — one of the names listed above (case-sensitive)
+function MatchaUI.SetFont(fontName)
+    local fontMap = {
+        UI          = Drawing.Fonts.UI,
+        System      = Drawing.Fonts.System,
+        SystemBold  = Drawing.Fonts.SystemBold,
+        Minecraft   = Drawing.Fonts.Minecraft,
+        Monospace   = Drawing.Fonts.Monospace,
+        Pixel       = Drawing.Fonts.Pixel,
+        Fortnite    = Drawing.Fonts.Fortnite,
+    }
+    local font = fontMap[fontName]
+    if not font then
+        warn("MatchaUI.SetFont: unknown font '" .. tostring(fontName) ..
+             "'. Valid options: UI, System, SystemBold, Minecraft, Monospace, Pixel, Fortnite")
+        return
+    end
+    _currentFont = font
+    -- Repaint all tracked Text Drawing objects
+    for _, obj in ipairs(_textObjects) do
+        pcall(function() obj.Font = font end)
+    end
+end
 
 
-local VALID_CHARS = {}
 do
     local s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?-_@#%&*()[]<>:;'/\\"
     for i = 1, #s do
@@ -1355,14 +1683,116 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- COLOR PICKER swatch clicks
-                    if elem.Type == "ColorPicker" and _mouseJustDown then
-                        for _, sw in ipairs(elem._swatches) do
-                            if inBounds(mPos.X, mPos.Y, sw._x, sw._y, sw._sz, sw._sz) then
-                                elem.Color = sw._color
-                                elem._preview.Color = sw._color
-                                if elem.Callback then pcall(elem.Callback, sw._color) end
+                    -- COLOR PICKER: header click toggles panel, hue/sv/rgb drag
+                    if elem.Type == "ColorPicker" then
+                        -- Toggle open/close on header click
+                        if _mouseJustDown and inBounds(mPos.X, mPos.Y, elem._headerX, elem._headerY, elem._headerW, elem._headerH) then
+                            elem._cpOpen = not elem._cpOpen
+                            elem._arrowTxt.Text = elem._cpOpen and "^" or "v"
+                            -- Show/hide all panel objects
+                            local function setPanelVis(state)
+                                for _, r in ipairs(elem._hueRects) do r.Visible = state end
+                                elem._hueCursor.Visible = state
+                                for _, sv in ipairs(elem._svRects) do sv._r.Visible = state end
+                                elem._svCursor.Visible = state
+                                elem._rSlider._bg.Visible = state
+                                elem._rSlider._fill.Visible = state
+                                elem._rSlider._lbl.Visible = state
+                                elem._rSlider._val.Visible = state
+                                elem._gSlider._bg.Visible = state
+                                elem._gSlider._fill.Visible = state
+                                elem._gSlider._lbl.Visible = state
+                                elem._gSlider._val.Visible = state
+                                elem._bSlider._bg.Visible = state
+                                elem._bSlider._fill.Visible = state
+                                elem._bSlider._lbl.Visible = state
+                                elem._bSlider._val.Visible = state
+                                elem._panelBg.Visible = state
+                                elem._hexLabel.Visible = state
                             end
+                            setPanelVis(elem._cpOpen)
+                        end
+
+                        if elem._cpOpen then
+                            -- Start hue bar drag
+                            if _mouseJustDown and inBounds(mPos.X, mPos.Y,
+                                elem._hueBarX, elem._hueBarY - 4, elem._hueBarW, elem._hueBarH + 8) then
+                                elem._cpDragHue = true
+                            end
+                            -- Start SV square drag
+                            local svW2 = elem._svSz * 1.5
+                            if _mouseJustDown and inBounds(mPos.X, mPos.Y,
+                                elem._svX, elem._svY, svW2, elem._svSz) then
+                                elem._cpDragSV = true
+                            end
+                            -- Start RGB slider drags
+                            local function checkSliderStart(sl)
+                                if _mouseJustDown and inBounds(mPos.X, mPos.Y,
+                                    sl._x, sl._y - 4, sl._w, sl._h + 8) then
+                                    return true
+                                end
+                                return false
+                            end
+                            if checkSliderStart(elem._rSlider) then elem._cpDragR = true end
+                            if checkSliderStart(elem._gSlider) then elem._cpDragG = true end
+                            if checkSliderStart(elem._bSlider) then elem._cpDragB = true end
+
+                            -- Release drags
+                            if _mouseJustUp then
+                                elem._cpDragHue = false
+                                elem._cpDragSV  = false
+                                elem._cpDragR   = false
+                                elem._cpDragG   = false
+                                elem._cpDragB   = false
+                            end
+
+                            -- Hue drag
+                            if elem._cpDragHue and mouse1 then
+                                local pct = math.max(0, math.min(1, (mPos.X - elem._hueBarX) / elem._hueBarW))
+                                elem._cpHue = pct
+                                elem._refreshSV()
+                                elem._refreshAll()
+                            end
+
+                            -- SV drag
+                            if elem._cpDragSV and mouse1 then
+                                local svW2 = elem._svSz * 1.5
+                                local pctS = math.max(0, math.min(1, (mPos.X - elem._svX) / svW2))
+                                local pctV = 1 - math.max(0, math.min(1, (mPos.Y - elem._svY) / elem._svSz))
+                                elem._cpSat = pctS
+                                elem._cpVal = pctV
+                                elem._refreshAll()
+                            end
+
+                            -- RGB slider drag helper
+                            local function dragRGBSlider(sl, channel)
+                                local pct = math.max(0, math.min(1, (mPos.X - sl._x) / sl._w))
+                                local c   = elem.Color
+                                local nr  = channel == "R" and pct or c.R
+                                local ng  = channel == "G" and pct or c.G
+                                local nb  = channel == "B" and pct or c.B
+                                local nc  = Color3.fromRGB(nr*255, ng*255, nb*255)
+                                -- Convert back to HSV to keep pickers in sync
+                                local nh, ns, nv = nc.R, nc.G, nc.B
+                                -- simple approach: update color directly then re-derive HSV
+                                elem.Color = nc
+                                elem._preview.Color = nc
+                                sl._fill.Size = Vector2.new(math.max(1, sl._w * pct), sl._h)
+                                sl._val.Text  = tostring(math.floor(pct * 255))
+                                if channel == "R" then
+                                    elem._rSlider._fill.Size = Vector2.new(math.max(1, sl._w * nr), sl._h)
+                                elseif channel == "G" then
+                                    elem._gSlider._fill.Size = Vector2.new(math.max(1, sl._w * ng), sl._h)
+                                else
+                                    elem._bSlider._fill.Size = Vector2.new(math.max(1, sl._w * nb), sl._h)
+                                end
+                                elem._hexLabel.Text = string.format("#%02X%02X%02X",
+                                    math.floor(nr*255), math.floor(ng*255), math.floor(nb*255))
+                                if elem.Callback then pcall(elem.Callback, nc) end
+                            end
+                            if elem._cpDragR and mouse1 then dragRGBSlider(elem._rSlider, "R") end
+                            if elem._cpDragG and mouse1 then dragRGBSlider(elem._gSlider, "G") end
+                            if elem._cpDragB and mouse1 then dragRGBSlider(elem._bSlider, "B") end
                         end
                     end
 
@@ -1433,6 +1863,25 @@ function MatchaUI.Run()
                                 item._txt.Position = Vector2.new(elem._x + 6, absY)
                                 item._txt.Visible  = (absY >= elem._y)
                                     and (absY + (elem._itemH or 18) <= elem._y + elem._h)
+                            end
+                        end
+                        -- Reposition and clip widget draw objects every frame
+                        if elem._widgets then
+                            for _, widget in ipairs(elem._widgets) do
+                                local baseAbsY = elem._y + widget._relY - elem._scrollY
+                                local wElem    = widget._elem
+                                local dy = baseAbsY - (wElem._y or baseAbsY)
+                                -- Shift element descriptor Y fields
+                                if wElem._y then wElem._y = wElem._y + dy end
+                                if wElem._ty then wElem._ty = wElem._ty + dy end
+                                if wElem._trackY then wElem._trackY = wElem._trackY + dy end
+                                for _, obj in ipairs(widget._objs) do
+                                    pcall(function()
+                                        obj.Position = obj.Position + Vector2.new(0, dy)
+                                        local oY = obj.Position.Y
+                                        obj.Visible = (oY >= elem._y) and (oY < elem._y + elem._h)
+                                    end)
+                                end
                             end
                         end
                     end
