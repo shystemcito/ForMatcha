@@ -19,7 +19,7 @@ Amen;
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Holly god i had to wait hours for claude and wasted all my tokens again just saying CONTINUE")
+print("Dale a tu cuerpo alegria macarena")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -237,7 +237,7 @@ function MatchaUI.CreateWindow(opts)
 
     -- Minimize button
     local minBtn  = draw(makeRect(wx + ww - 52, wy + 6, 18, 16, Theme.MinimizeBtn, baseZ+3, true))
-    local minTxt  = draw(makeText("-", wx + ww - 52 + 6, wy + 7, 13, Color3.fromHex("#000000"), baseZ+4, false, false))
+    local minTxt  = draw(makeText("-", wx + ww - 52 + 6, wy + 7, 13, Color3.fromHex("#FFFFFF"), baseZ+4, false, false))
 
     -- Close button
     local closeBtn  = draw(makeRect(wx + ww - 26, wy + 6, 18, 16, Theme.CloseBtn, baseZ+3, true))
@@ -337,7 +337,7 @@ function MatchaUI.CreateWindow(opts)
                     if elem.Type == "Checkbox" and elem._check then
                         elem._check.Visible = elem.State
                     end
-                    if (elem.Type == "TextInput" or elem.Type == "SearchBar") and elem._cursor then
+                    if elem.Type == "TextInput" and elem._cursor then
                         elem._cursor.Visible = false
                     end
                     if elem.Type == "Dropdown" then
@@ -382,7 +382,7 @@ function MatchaUI.CreateWindow(opts)
                         if elem.Type == "Checkbox" and elem._check then
                             elem._check.Visible = elem.State
                         end
-                        if (elem.Type == "TextInput" or elem.Type == "SearchBar") and elem._cursor then
+                        if (elem.Type == "TextInput") and elem._cursor then
                             elem._cursor.Visible = false
                         end
                         if elem.Type == "Dropdown" then
@@ -487,8 +487,8 @@ function MatchaUI.CreateWindow(opts)
             if elem.Type == "Checkbox" and elem._check then
                 elem._check.Visible = elem.State
             end
-            -- TextInput/SearchBar: cursor always starts hidden until re-focused
-            if (elem.Type == "TextInput" or elem.Type == "SearchBar") and elem._cursor then
+            -- TextInput: cursor always starts hidden until re-focused
+            if (elem.Type == "TextInput") and elem._cursor then
                 elem._cursor.Visible = false
             end
             -- Dropdown: item list always starts closed
@@ -535,7 +535,7 @@ function MatchaUI.CreateWindow(opts)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, 20, Theme.SectionHeader, baseZ+5, true))
         local lbl  = draw(makeText(labelText, cx + 6, cy + 4, 12, Theme.SectionText, baseZ+6, false, true))
-        table.insert(objs, bg)
+        trackAccent(lbl)
         table.insert(objs, lbl)
         registerElem(cat, objs, 20)
         return objs
@@ -606,6 +606,7 @@ function MatchaUI.CreateWindow(opts)
         local bg  = draw(makeRect(cx, cy, cw, h, Theme.ElementBg, baseZ+5, true))
         local lbl = draw(makeText(labelText, cx + 8, cy + 6, 12, Theme.TextPrimary, baseZ+6, false, true))
         local valLbl = draw(makeText(tostring(math.floor(val)), cx + cw - 30, cy + 6, 12, Theme.AccentOn, baseZ+6, false, true))
+        trackAccent(valLbl)
         -- track
         local trackPad = 8
         local trackW = cw - trackPad*2
@@ -615,6 +616,7 @@ function MatchaUI.CreateWindow(opts)
         local fillPct = (val - min) / math.max(max - min, 0.001)
         local fillW   = math.floor(trackW * fillPct)
         local fillRect = draw(makeRect(cx + trackPad, trackY, math.max(fillW,1), 4, Theme.SliderFill, baseZ+7, true))
+        trackAccent(fillRect)
         -- knob
         local knobW, knobH = 10, 14
         local knobX = cx + trackPad + fillW - knobW/2
@@ -650,6 +652,7 @@ function MatchaUI.CreateWindow(opts)
         local boxBg  = draw(makeRect(cx + cw - 130, cy + 4, 122, 22, Theme.InputBg, baseZ+6, true))
         local selTxt = draw(makeText(selected, cx + cw - 126, cy + 9, 12, Theme.TextPrimary, baseZ+7, false, true))
         local arrow  = draw(makeText("v", cx + cw - 14, cy + 9, 11, Theme.AccentOn, baseZ+7, false, false))
+        trackAccent(arrow)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, boxBg)
         table.insert(objs, selTxt) table.insert(objs, arrow)
 
@@ -691,6 +694,7 @@ function MatchaUI.CreateWindow(opts)
         local inputBg = draw(makeRect(cx + cw - 160, cy + 4, 152, 22, Theme.InputBg, baseZ+6, true))
         local inputTxt = draw(makeText(placeholder or "", cx + cw - 156, cy + 9, 12, Theme.TextDisabled, baseZ+7, false, true))
         local cursor   = draw(makeRect(cx + cw - 156, cy + 7, 1, 14, Theme.AccentOn, baseZ+8, true))
+        trackAccent(cursor)
         cursor.Visible = false
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, inputBg)
         table.insert(objs, inputTxt) table.insert(objs, cursor)
@@ -725,6 +729,7 @@ function MatchaUI.CreateWindow(opts)
         boxBorder.Filled = false
         -- check mark (filled accent square inside)
         local check = draw(makeRect(bx+3, by+3, boxSz-6, boxSz-6, Theme.AccentOn, baseZ+7, true))
+        trackAccent(check)
         check.Visible = state
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, box)
         table.insert(objs, boxBorder) table.insert(objs, check)
@@ -758,31 +763,6 @@ function MatchaUI.CreateWindow(opts)
             _x=cx+cw-100, _y=cy, _w=92, _h=ELEM_H,
             _kbTxt=kbTxt, Key=key, Listening=false,
             Callback=callback,
-        }
-        registerElemDesc(cat, elem)
-        return elem
-    end
-
-    -- ── SEARCH BAR
-    local function addSearchBar(cat, placeholder, callback)
-        local cx  = contentX()
-        local cw  = contentW()
-        local cy  = contentCursorY(cat)
-        local text = ""
-        local objs = {}
-        local bg  = draw(makeRect(cx, cy, cw, ELEM_H, Theme.ElementBg, baseZ+5, true))
-        local inputBg = draw(makeRect(cx+4, cy+4, cw-8, 22, Theme.InputBg, baseZ+6, true))
-        -- "Search:" label inline
-        local prefix = draw(makeText("Search: ", cx + 8, cy + 9, 12, Theme.TextSecondary, baseZ+7, false, false))
-        local inputTxt = draw(makeText(placeholder or "", cx + 60, cy + 9, 12, Theme.TextDisabled, baseZ+7, false, true))
-        table.insert(objs, bg) table.insert(objs, inputBg) table.insert(objs, prefix) table.insert(objs, inputTxt)
-        registerElem(cat, objs, ELEM_H)
-        local elem = {
-            Type="SearchBar", _bg=bg, _draws=objs,
-            _x=cx, _y=cy, _w=cw, _h=ELEM_H,
-            _inputTxt=inputTxt, _prefix=prefix,
-            _placeholder=placeholder or "",
-            Text=text, Focused=false, Callback=callback,
         }
         registerElemDesc(cat, elem)
         return elem
@@ -850,6 +830,7 @@ function MatchaUI.CreateWindow(opts)
         local initStr = tostring(defaultValue or "")
         local initX   = valRightEdge - math.min(#initStr * 7, valW)
         local valTxt  = draw(makeText(initStr, initX, cy + ELEM_H/2 - 7, 13, Theme.AccentOn, baseZ+7, false, true))
+        trackAccent(valTxt)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, valCover) table.insert(objs, valTxt)
         registerElem(cat, objs, ELEM_H)
         local elem = {
@@ -903,28 +884,71 @@ function MatchaUI.CreateWindow(opts)
         return elem
     end
 
-    -- ── SCROLLING FRAME (decorative scroll container boundary)
+    -- ── SCROLLING FRAME
+    -- visH  : visible height of the frame (px). innerH auto-grows as items are added.
+    -- Scrolling is controlled exclusively by dragging the scrollbar thumb.
+    -- Use elem:AddItem(text) after creation to populate rows.
+    -- Each frame in the main loop re-positions item text objects to reflect _scrollY,
+    -- and hides rows that fall outside the visible area (manual clip).
     local function addScrollFrame(cat, innerH, callback)
-        local cx  = contentX()
-        local cw  = contentW()
-        local cy  = contentCursorY(cat)
+        local cx   = contentX()
+        local cw   = contentW()
+        local cy   = contentCursorY(cat)
         local visH = math.min(innerH, 80)
         local objs = {}
         local bg   = draw(makeRect(cx, cy, cw, visH, Theme.InputBg, baseZ+5, true))
-        -- scroll bar track
-        local sbTrack = draw(makeRect(cx + cw - 8, cy, 6, visH, Theme.ScrollBar, baseZ+6, true))
-        -- scroll thumb (represents position)
-        local thumbH = math.max(20, math.floor(visH * visH / math.max(innerH,1)))
-        local thumb  = draw(makeRect(cx + cw - 8, cy, 6, thumbH, Theme.ScrollThumb, baseZ+7, true))
-        table.insert(objs, bg) table.insert(objs, sbTrack) table.insert(objs, thumb)
+        -- clip border
+        local border = draw(makeRect(cx, cy, cw, visH, Theme.ElementBorder, baseZ+5, false))
+        border.Filled = false
+        border.Thickness = 1
+        -- scrollbar track
+        local sbX     = cx + cw - 8
+        local sbTrack = draw(makeRect(sbX, cy, 6, visH, Theme.ScrollBar, baseZ+6, true))
+        -- thumb (height proportional to content)
+        local thumbH = math.max(20, math.floor(visH * visH / math.max(innerH, 1)))
+        local thumb  = draw(makeRect(sbX, cy, 6, thumbH, Theme.ScrollThumb, baseZ+7, true))
+        trackAccent(thumb)
+        table.insert(objs, bg) table.insert(objs, border)
+        table.insert(objs, sbTrack) table.insert(objs, thumb)
         registerElem(cat, objs, visH)
+
         local elem = {
             Type="ScrollFrame", _bg=bg, _draws=objs,
             _x=cx, _y=cy, _w=cw, _h=visH,
+            _sbX=sbX,
             _thumb=thumb, _thumbH=thumbH,
             _innerH=innerH, _scrollY=0,
+            _thumbDragging=false, _thumbDragOffY=0,
+            _items={},   -- { _txt=DrawObj, _relY=number }
+            _itemH=18,
             Callback=callback,
         }
+
+        -- AddItem: add a labelled text row into the scroll frame.
+        -- The main loop re-clips and repositions item labels each frame.
+        function elem:AddItem(text)
+            local rowIdx = #self._items
+            local relY   = rowIdx * self._itemH + 4
+            local absY   = self._y + relY  -- initial position (no scroll yet)
+            local txt    = draw(makeText(
+                text, self._x + 6, absY, 12, Theme.TextPrimary, baseZ+8, false, false
+            ))
+            txt.Visible = (absY >= self._y) and (absY + self._itemH <= self._y + self._h)
+            table.insert(self._items, {_txt=txt, _relY=relY})
+            table.insert(objs, txt)
+            -- Grow innerH to fit all items
+            local neededH = (#self._items) * self._itemH + 8
+            if neededH > self._innerH then
+                self._innerH = neededH
+                local newThH = math.max(20, math.floor(self._h * self._h / self._innerH))
+                self._thumbH = newThH
+                self._thumb.Size = Vector2.new(6, newThH)
+            end
+            -- Hide immediately if category not yet active
+            if win.ActiveCat ~= cat then txt.Visible = false end
+            return txt
+        end
+
         registerElemDesc(cat, elem)
         return elem
     end
@@ -965,7 +989,6 @@ function MatchaUI.CreateWindow(opts)
     win.AddTextInput   = addTextInput
     win.AddCheckbox    = addCheckbox
     win.AddKeybind     = addKeybind
-    win.AddSearchBar   = addSearchBar
     win.AddColorPicker = addColorPicker
     win.AddValueLabel  = addValueLabel
     win.AddScrollFrame = addScrollFrame
@@ -1081,9 +1104,63 @@ function MatchaUI.Notify(title, message, duration)
 end
 
 -- ─────────────────────────────────────────────────────────────
--- TEXT INPUT  (shared state for all inputs)
+-- ACCENT COLOR  (live update — change once, re-themes everything)
 -- ─────────────────────────────────────────────────────────────
-local _focusedInput = nil  -- currently focused TextInput or SearchBar elem
+-- Registry of Drawing objects that should always match AccentColor.
+-- Each element builder registers its accent-colored draws here so
+-- SetAccentColor can repaint them without rebuilding the UI.
+local _accentObjects = {}  -- { obj = DrawingObject, prop = "Color" }
+
+local function trackAccent(obj)
+    table.insert(_accentObjects, obj)
+end
+
+-- Call this from a ColorPicker callback (or any time) to re-theme the
+-- entire UI to a new accent color instantly.
+-- @param color  Color3  — the new accent color
+function MatchaUI.SetAccentColor(color)
+    AccentColor           = color
+    Theme.CategoryActive  = color
+    Theme.AccentOn        = color
+    Theme.SliderFill      = color
+    Theme.InputBorder     = color
+    Theme.NotifBorder     = color
+    Theme.TabActive       = color
+    Theme.ScrollThumb     = color
+    Theme.SectionText     = color
+    -- Repaint all registered accent-colored objects
+    for _, obj in ipairs(_accentObjects) do
+        pcall(function() obj.Color = color end)
+    end
+    -- Repaint toggle tracks that are currently ON
+    for _, win in ipairs(_windows) do
+        for _, elem in ipairs(win._elements) do
+            if elem.Type == "Toggle" and elem.State and elem._track then
+                pcall(function() elem._track.Color = color end)
+            end
+            -- Active tab bg
+            if elem.Type == "TabSystem" and elem._tabs then
+                for i, tab in ipairs(elem._tabs) do
+                    if i == elem._activeIdx then
+                        pcall(function() tab._bg.Color = color end)
+                    end
+                end
+            end
+        end
+        -- Active category bg
+        if win.ActiveCat and win.ActiveCat._bg then
+            pcall(function() win.ActiveCat._bg.Color = color end)
+        end
+    end
+    -- Repaint notification accent bars currently on screen
+    for _, n in ipairs(_notifs) do
+        pcall(function() n._accent.Color = color end)
+        pcall(function() n._bar.Color    = color end)
+        pcall(function() n._title.Color  = color end)
+    end
+end
+
+
 
 local VALID_CHARS = {}
 do
@@ -1329,7 +1406,7 @@ function MatchaUI.Run()
                     end
 
                     -- TEXT INPUT / SEARCH BAR: focus on click
-                    if (elem.Type == "TextInput" or elem.Type == "SearchBar") and _mouseJustDown then
+                    if (elem.Type == "TextInput") and _mouseJustDown then
                         if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
                             _focusedInput = elem
                             elem.Focused   = true
@@ -1355,25 +1432,36 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- SCROLL FRAME: mouse wheel scrolling while hovering
+                    -- SCROLL FRAME: scrollbar thumb drag
                     if elem.Type == "ScrollFrame" then
-                        if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
-                            local wheel = getmousewheel and getmousewheel() or 0
-                            if wheel ~= 0 then
-                                -- wheel > 0 = scroll up, wheel < 0 = scroll down
-                                local delta = -wheel * 15
-                                elem._scrollY = math.max(0, math.min(
-                                    elem._innerH - elem._h,
-                                    elem._scrollY + delta
-                                ))
-                                local maxScroll = math.max(1, elem._innerH - elem._h)
-                                local pct = elem._scrollY / maxScroll
-                                local thumbMaxY = elem._h - elem._thumbH
-                                elem._thumb.Position = Vector2.new(
-                                    elem._x + elem._w - 8,
-                                    elem._y + pct * thumbMaxY
-                                )
-                                if elem.Callback then pcall(elem.Callback, elem._scrollY) end
+                        local sbX = elem._sbX or (elem._x + elem._w - 8)
+                        local sbY = elem._y
+                        local sbW = 6
+                        local sbH = elem._h
+                        if _mouseJustDown and inBounds(mPos.X, mPos.Y, sbX, sbY, sbW, sbH) then
+                            elem._thumbDragging = true
+                            elem._thumbDragOffY = mPos.Y - elem._thumb.Position.Y
+                        end
+                        if _mouseJustUp then
+                            elem._thumbDragging = false
+                        end
+                        if elem._thumbDragging and mouse1 then
+                            local maxScroll = math.max(1, elem._innerH - elem._h)
+                            local thumbMaxY = elem._h - elem._thumbH
+                            local rawY      = mPos.Y - (elem._thumbDragOffY or 0)
+                            local clampedY  = math.max(elem._y, math.min(elem._y + thumbMaxY, rawY))
+                            elem._thumb.Position = Vector2.new(sbX, clampedY)
+                            local pct       = thumbMaxY > 0 and (clampedY - elem._y) / thumbMaxY or 0
+                            elem._scrollY   = pct * maxScroll
+                            if elem.Callback then pcall(elem.Callback, elem._scrollY) end
+                        end
+                        -- Reposition and clip item text rows every frame
+                        if elem._items then
+                            for _, item in ipairs(elem._items) do
+                                local absY = elem._y + item._relY - elem._scrollY
+                                item._txt.Position = Vector2.new(elem._x + 6, absY)
+                                item._txt.Visible  = (absY >= elem._y)
+                                    and (absY + (elem._itemH or 18) <= elem._y + elem._h)
                             end
                         end
                     end
@@ -1398,8 +1486,8 @@ function MatchaUI.Run()
             end
 
             -- ── Text input character handling (for focused input)
-            -- Uses edge-triggered detection (key just-down) + auto-repeat after hold.
-            -- Avoids blocking wait() calls so the main loop never stalls.
+            -- Uses iskeypressed() polling with per-key edge detection + auto-repeat.
+            -- iskeypressed() is the correct Matcha API; getpressedkeys() does not exist.
             if _focusedInput then
                 local elem = _focusedInput
 
@@ -1409,17 +1497,34 @@ function MatchaUI.Run()
                     elem._inputTxt.Text  = displayText
                     elem._inputTxt.Color = elem.Text == "" and Theme.TextDisabled or Theme.TextPrimary
                     if elem._cursor then
-                        local cursorX = elem._x + 4 + (#elem.Text * 7)
+                        -- Clamp cursor so it does not overflow the input box
+                        local inputLeft = elem._x + 4
+                        local inputRight = elem._x + elem._w - 6
+                        local cursorX = math.min(inputLeft + (#elem.Text * 7), inputRight)
                         elem._cursor.Position = Vector2.new(cursorX, elem._cursor.Position.Y)
                     end
                     if elem.Callback then pcall(elem.Callback, elem.Text) end
                 end
 
-                -- Process each VK that could contribute a character.
-                -- getpressedkeys() returns a list of currently-held VK codes.
-                local heldKeys = (getpressedkeys and getpressedkeys()) or {}
-                local heldSet  = {}
-                for _, k in ipairs(heldKeys) do heldSet[k] = true end
+                -- Build current held-key set via iskeypressed() on all scannable VK codes.
+                -- We check: Backspace(8), Enter(13), Shift(16), Space(32), A-Z(65-90),
+                -- 0-9(48-57), numpad(96-105), and common punctuation VKs.
+                local SCAN_KEYS = {
+                    8, 13, 16, 32,
+                    48,49,50,51,52,53,54,55,56,57,
+                    65,66,67,68,69,70,71,72,73,74,75,76,77,
+                    78,79,80,81,82,83,84,85,86,87,88,89,90,
+                    96,97,98,99,100,101,102,103,104,105,
+                    107,109,110,186,187,188,189,190,191,192,219,220,221,222
+                }
+                local heldSet = {}
+                for _, k in ipairs(SCAN_KEYS) do
+                    if iskeypressed(k) then
+                        heldSet[k] = true
+                    end
+                end
+
+                local shift = heldSet[16]
 
                 -- Detect newly-pressed keys (edge trigger)
                 for k, _ in pairs(heldSet) do
@@ -1444,7 +1549,6 @@ function MatchaUI.Run()
                         else
                             -- Convert VK code to character
                             local char = nil
-                            local shift = heldSet[16]  -- Shift key
                             if k >= 65 and k <= 90 then
                                 -- A–Z
                                 char = shift and string.char(k) or string.char(k + 32)
@@ -1535,4 +1639,5 @@ function MatchaUI.Destroy()
     _notifs   = {}
     _tooltips = {}
 end
+
 return MatchaUI
