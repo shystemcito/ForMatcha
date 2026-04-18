@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Asereje je deje")
+print("Color picker maybe")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -304,25 +304,24 @@ function MatchaUI.CreateWindow(opts)
                     if sw._y then sw._y = sw._y + dy end
                 end
             end
-            -- New HSV ColorPicker panel fields
+            -- ColorPicker: update all hit-test coordinates for header and panel
             if elem.Type == "ColorPicker" then
                 if elem._headerX then elem._headerX = elem._headerX + dx end
                 if elem._headerY then elem._headerY = elem._headerY + dy end
                 if elem._arrowX  then elem._arrowX  = elem._arrowX  + dx end
                 if elem._arrowY  then elem._arrowY  = elem._arrowY  + dy end
-                if elem._hueBarX then elem._hueBarX = elem._hueBarX + dx end
-                if elem._hueBarY then elem._hueBarY = elem._hueBarY + dy end
-                if elem._svX     then elem._svX     = elem._svX     + dx end
-                if elem._svY     then elem._svY     = elem._svY     + dy end
+                -- Panel floats to the right of the window; shift with the window
+                if elem._panelX  then elem._panelX  = elem._panelX  + dx end
                 if elem._panelY  then elem._panelY  = elem._panelY  + dy end
-                if elem._rsX     then elem._rsX     = elem._rsX     + dx end
-                if elem._rSlider then
-                    elem._rSlider._x = elem._rSlider._x + dx
-                    elem._rSlider._y = elem._rSlider._y + dy
-                    elem._gSlider._x = elem._gSlider._x + dx
-                    elem._gSlider._y = elem._gSlider._y + dy
-                    elem._bSlider._x = elem._bSlider._x + dx
-                    elem._bSlider._y = elem._bSlider._y + dy
+                -- Palette swatches hit-test coords
+                for _, sw in ipairs(elem._paletteSwatch or {}) do
+                    sw._x = sw._x + dx
+                    sw._y = sw._y + dy
+                end
+                -- Stepper buttons hit-test coords
+                for _, btn in ipairs(elem._btnObjs or {}) do
+                    btn._x = btn._x + dx
+                    btn._y = btn._y + dy
                 end
             end
             -- ScrollFrame scrollbar X anchor
@@ -364,6 +363,23 @@ function MatchaUI.CreateWindow(opts)
                             item._bg.Visible  = false
                             item._txt.Visible = false
                         end
+                    end
+                    if elem.Type == "ColorPicker" then
+                        elem._cpOpen = false
+                        elem._arrowTxt.Text = "v"
+                        elem._panelBg.Visible = false
+                        for _, r in ipairs(elem._hueRects) do r.Visible = false end
+                        elem._hueCursor.Visible = false
+                        for _, sv in ipairs(elem._svRects) do sv._r.Visible = false end
+                        elem._svCursor.Visible = false
+                        elem._rSlider._bg.Visible=false elem._rSlider._fill.Visible=false
+                        elem._rSlider._lbl.Visible=false elem._rSlider._val.Visible=false
+                        elem._gSlider._bg.Visible=false elem._gSlider._fill.Visible=false
+                        elem._gSlider._lbl.Visible=false elem._gSlider._val.Visible=false
+                        elem._bSlider._bg.Visible=false elem._bSlider._fill.Visible=false
+                        elem._bSlider._lbl.Visible=false elem._bSlider._val.Visible=false
+                        elem._hexLabel.Visible = false
+                        for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw.Visible = false end) end
                     end
                 end
             end
@@ -409,6 +425,23 @@ function MatchaUI.CreateWindow(opts)
                                 item._bg.Visible  = false
                                 item._txt.Visible = false
                             end
+                        end
+                        if elem.Type == "ColorPicker" then
+                            elem._cpOpen = false
+                            elem._arrowTxt.Text = "v"
+                            elem._panelBg.Visible = false
+                            for _, r in ipairs(elem._hueRects) do r.Visible = false end
+                            elem._hueCursor.Visible = false
+                            for _, sv in ipairs(elem._svRects) do sv._r.Visible = false end
+                            elem._svCursor.Visible = false
+                            elem._rSlider._bg.Visible=false elem._rSlider._fill.Visible=false
+                            elem._rSlider._lbl.Visible=false elem._rSlider._val.Visible=false
+                            elem._gSlider._bg.Visible=false elem._gSlider._fill.Visible=false
+                            elem._gSlider._lbl.Visible=false elem._gSlider._val.Visible=false
+                            elem._bSlider._bg.Visible=false elem._bSlider._fill.Visible=false
+                            elem._bSlider._lbl.Visible=false elem._bSlider._val.Visible=false
+                            elem._hexLabel.Visible = false
+                            for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw.Visible = false end) end
                         end
                     end
                 else
@@ -516,6 +549,24 @@ function MatchaUI.CreateWindow(opts)
                     item._bg.Visible  = false
                     item._txt.Visible = false
                 end
+            end
+            -- ColorPicker: panel always starts closed
+            if elem.Type == "ColorPicker" then
+                elem._cpOpen = false
+                elem._arrowTxt.Text = "v"
+                elem._panelBg.Visible = false
+                for _, r in ipairs(elem._hueRects) do r.Visible = false end
+                elem._hueCursor.Visible = false
+                for _, sv in ipairs(elem._svRects) do sv._r.Visible = false end
+                elem._svCursor.Visible = false
+                elem._rSlider._bg.Visible = false elem._rSlider._fill.Visible = false
+                elem._rSlider._lbl.Visible = false elem._rSlider._val.Visible = false
+                elem._gSlider._bg.Visible = false elem._gSlider._fill.Visible = false
+                elem._gSlider._lbl.Visible = false elem._gSlider._val.Visible = false
+                elem._bSlider._bg.Visible = false elem._bSlider._fill.Visible = false
+                elem._bSlider._lbl.Visible = false elem._bSlider._val.Visible = false
+                elem._hexLabel.Visible = false
+                for _, sw in ipairs(elem._paletteSwatch or {}) do pcall(function() sw.Visible = false end) end
             end
         end
     end
@@ -786,217 +837,190 @@ function MatchaUI.CreateWindow(opts)
         return elem
     end
 
-    -- ── COLOR PICKER  (HSV wheel + SV square + RGB sliders + live preview)
-    -- Layout (collapsed header row + expanded panel toggled on click):
-    --   Row  : [Label]  [Preview swatch]  [▼ button]
-    --   Panel: Hue ring (drawn as segments), SV square, R/G/B sliders
+    -- ── COLOR PICKER
+    -- Layout:
+    --   Header row : [Label]  [Preview swatch]  [> button]
+    --   Panel (opens to the RIGHT of the window, floating):
+    --     Left  : hex color palette (10 cols × 8 rows of swatches)
+    --     Right : R/G/B +/- steppers + hex label + live preview
     local function addColorPicker(cat, labelText, defaultColor, callback)
         local cx  = contentX()
         local cw  = contentW()
         local cy  = contentCursorY(cat)
         local rowH = ELEM_H
-        local panelH = 160      -- height of the expanded panel
         local color = defaultColor or Color3.fromRGB(255, 100, 100)
         local objs = {}
 
         -- ── Header row ──────────────────────────────────────────────────
-        local bg   = draw(makeRect(cx, cy, cw, rowH, Theme.ElementBg, baseZ+5, true))
-        local lbl  = draw(makeText(labelText, cx + 8, cy + 6, 12, Theme.TextSecondary, baseZ+6, false, true))
+        local bg      = draw(makeRect(cx, cy, cw, rowH, Theme.ElementBg, baseZ+5, true))
+        local lbl     = draw(makeText(labelText, cx + 8, cy + 6, 12, Theme.TextSecondary, baseZ+6, false, true))
         local preview = draw(makeRect(cx + cw - 54, cy + 4, 22, 22, color, baseZ+7, true))
         local arrowBtn = draw(makeRect(cx + cw - 28, cy + 4, 22, 22, Theme.InputBg, baseZ+7, true))
-        local arrowTxt = draw(makeText("v", cx + cw - 21, cy + 8, 12, Theme.AccentOn, baseZ+8, false, false))
+        local arrowTxt = draw(makeText(">", cx + cw - 22, cy + 8, 12, Theme.AccentOn, baseZ+8, false, false))
         trackAccent(arrowTxt)
         table.insert(objs, bg) table.insert(objs, lbl) table.insert(objs, preview)
         table.insert(objs, arrowBtn) table.insert(objs, arrowTxt)
 
-        -- ── Panel background (hidden by default) ────────────────────────
-        local panelBg = draw(makeRect(cx, cy + rowH, cw, panelH, Theme.DropdownBg, baseZ+5, true))
+        -- ── Panel geometry: opens to the RIGHT of the whole window ───────
+        -- panelX is right edge of the window + 4px gap
+        local panelX  = win.X + ww + 4
+        local panelY  = cy
+        local swatchSz = 16   -- each palette swatch cell
+        local swatchGap = 2
+        local palCols = 10
+        local palRows = 8
+        local palW    = palCols * (swatchSz + swatchGap) - swatchGap
+        local palH    = palRows * (swatchSz + swatchGap) - swatchGap
+        local rsAreaX = panelX + palW + 8
+        local rsAreaW = 80          -- width of the R/G/B stepper area
+        local panelW  = palW + 8 + rsAreaW + 8
+        local panelH  = palH + 8    -- a little padding top+bottom
+
+        local panelBg = draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.DropdownBg, baseZ+50, true))
         panelBg.Visible = false
         table.insert(objs, panelBg)
+        -- thin accent border around panel
+        local panelBorder = draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.ElementBorder, baseZ+50, false))
+        panelBorder.Filled = false panelBorder.Thickness = 1 panelBorder.Visible = false
+        table.insert(objs, panelBorder)
 
-        -- Helper: HSV → Color3
-        local function hsv2rgb(h, s, v)
-            if s == 0 then return Color3.fromRGB(v*255, v*255, v*255) end
-            local i = math.floor(h * 6)
-            local f = h * 6 - i
-            local p = v * (1 - s)
-            local q = v * (1 - f * s)
-            local t = v * (1 - (1 - f) * s)
-            i = i % 6
-            local r,g,b
-            if i==0 then r,g,b=v,t,p
-            elseif i==1 then r,g,b=q,v,p
-            elseif i==2 then r,g,b=p,v,t
-            elseif i==3 then r,g,b=p,q,v
-            elseif i==4 then r,g,b=t,p,v
-            else r,g,b=v,p,q end
-            return Color3.fromRGB(r*255, g*255, b*255)
+        -- ── Palette colors (flat hex table, same hue-ring layout as image) ──
+        local PALETTE = {
+            -- row 1: warm reds/oranges
+            "8B0000","B22222","CC2200","FF0000","FF4500","FF6347","FF7F50","FF8C00","FFA500","FFD700",
+            -- row 2: yellows/greens
+            "FFFF00","ADFF2F","7FFF00","00FF00","00FA9A","00FF7F","39FF14","00FF80","00FFAA","00FFCC",
+            -- row 3: cyans/teals
+            "00FFFF","00CED1","00BFFF","1E90FF","0000FF","0000CD","00008B","191970","483D8B","6A0DAD",
+            -- row 4: purples/pinks
+            "8B008B","9400D3","EE82EE","FF00FF","FF1493","FF69B4","FFB6C1","C71585","DB7093","FF007F",
+            -- row 5: earth tones
+            "A52A2A","8B4513","D2691E","CD853F","DEB887","F5DEB3","FFE4B5","FFDAB9","FAEBD7","FAF0E6",
+            -- row 6: blues/indigos
+            "4169E1","6495ED","87CEEB","ADD8E6","B0E0E6","5F9EA0","4682B4","708090","778899","B0C4DE",
+            -- row 7: greens
+            "006400","228B22","2E8B57","3CB371","66CDAA","8FBC8F","90EE90","98FB98","F0FFF0","E8F5E9",
+            -- row 8: grays/blacks/whites
+            "000000","1A1A1A","333333","555555","777777","999999","AAAAAA","CCCCCC","EEEEEE","FFFFFF",
+        }
+
+        local paletteSwatches = {}
+        for i, hexStr in ipairs(PALETTE) do
+            local row = math.floor((i-1) / palCols)
+            local col = (i-1) % palCols
+            local sx  = panelX + 4 + col * (swatchSz + swatchGap)
+            local sy  = panelY + 4 + row * (swatchSz + swatchGap)
+            local r2  = tonumber(hexStr:sub(1,2), 16) or 0
+            local g2  = tonumber(hexStr:sub(3,4), 16) or 0
+            local b2  = tonumber(hexStr:sub(5,6), 16) or 0
+            local sw  = draw(makeRect(sx, sy, swatchSz, swatchSz, Color3.fromRGB(r2,g2,b2), baseZ+52, true))
+            sw.Visible = false
+            table.insert(paletteSwatches, {_r=sw, _x=sx, _y=sy, _w=swatchSz, _h=swatchSz,
+                _color=Color3.fromRGB(r2,g2,b2)})
+            table.insert(objs, sw)
         end
 
-        -- Helper: Color3 → HSV
-        local function rgb2hsv(c)
-            local r,g,b = c.R, c.G, c.B
-            local maxC = math.max(r,g,b)
-            local minC = math.min(r,g,b)
-            local d = maxC - minC
-            local h2, s2, v2
-            v2 = maxC
-            s2 = maxC == 0 and 0 or d/maxC
-            if d == 0 then h2 = 0
-            elseif maxC == r then h2 = ((g-b)/d) % 6
-            elseif maxC == g then h2 = (b-r)/d + 2
-            else h2 = (r-g)/d + 4 end
-            h2 = h2 / 6
-            return h2, s2, v2
-        end
-
-        local initH, initS, initV = rgb2hsv(color)
-        local _cpHue = initH
-        local _cpSat = initS
-        local _cpVal = initV
-
-        -- ── Hue bar (horizontal gradient using colored segments) ─────────
-        local hueBarH = 14
-        local hueBarW = cw - 16
-        local hueBarX = cx + 8
-        local hueBarY = cy + rowH + 8
-        local hueSeg  = 24   -- number of hue segments
-        local hueRects = {}
-        for i = 0, hueSeg - 1 do
-            local hFrac = i / hueSeg
-            local segW  = math.ceil(hueBarW / hueSeg)
-            local segX  = hueBarX + math.floor(i * hueBarW / hueSeg)
-            local sr    = draw(makeRect(segX, hueBarY, segW + 1, hueBarH, hsv2rgb(hFrac, 1, 1), baseZ+6, true))
-            sr.Visible = false
-            table.insert(hueRects, sr)
-            table.insert(objs, sr)
-        end
-        -- Hue cursor (thin white line)
-        local hueCursorX = hueBarX + math.floor(_cpHue * hueBarW) - 1
-        local hueCursor  = draw(makeRect(hueCursorX, hueBarY - 2, 3, hueBarH + 4, Color3.fromRGB(255,255,255), baseZ+7, true))
-        hueCursor.Visible = false
-        table.insert(objs, hueCursor)
-
-        -- ── SV square (Value = brightness rows, Sat = columns) ───────────
-        local svSz    = 60
-        local svX     = cx + 8
-        local svY     = hueBarY + hueBarH + 6
-        local svRows  = 6
-        local svCols  = 8
-        local svCellW = math.ceil(svSz * 1.5 / svCols)
-        local svCellH = math.ceil(svSz / svRows)
-        local svRects = {}
-        for row = 0, svRows - 1 do
-            for col = 0, svCols - 1 do
-                local sv2 = 1 - row / (svRows - 1)
-                local ss2 = col / (svCols - 1)
-                local cellX = svX + col * svCellW
-                local cellY = svY + row * svCellH
-                local sr    = draw(makeRect(cellX, cellY, svCellW + 1, svCellH + 1, hsv2rgb(_cpHue, ss2, sv2), baseZ+6, true))
-                sr.Visible = false
-                table.insert(svRects, {_r=sr, _s=ss2, _v=sv2})
-                table.insert(objs, sr)
-            end
-        end
-        -- SV cursor dot
-        local svCurDotX = svX + math.floor(_cpSat * (svSz*1.5 - svCellW))
-        local svCurDotY = svY + math.floor((1 - _cpVal) * (svSz - svCellH))
-        local svCursor  = draw(makeRect(svCurDotX - 3, svCurDotY - 3, 7, 7, Color3.fromRGB(255,255,255), baseZ+8, false))
-        svCursor.Filled    = false
-        svCursor.Thickness = 2
-        svCursor.Visible   = false
-        table.insert(objs, svCursor)
-
-        -- ── RGB sliders (compact, right of SV square) ────────────────────
-        local rsX  = svX + math.ceil(svSz * 1.5) + 10
-        local rsW  = cw - (rsX - cx) - 8
-        local rsH  = 10
-        local rY   = svY
-        local gY   = svY + rsH + 8
-        local bY   = svY + (rsH + 8) * 2
-        local function makeRGBSlider(sy, clr, lchar)
-            local trkBg = draw(makeRect(rsX, sy, rsW, rsH, Theme.SliderTrack, baseZ+6, true))
-            local fill  = draw(makeRect(rsX, sy, math.max(1, rsW * clr), rsH, Color3.fromRGB(
-                lchar=="R" and 200 or 60, lchar=="G" and 200 or 60, lchar=="B" and 200 or 60
-            ), baseZ+7, true))
-            local lbl2  = draw(makeText(lchar, rsX - 10, sy - 1, 11, Theme.TextSecondary, baseZ+7, false, false))
-            local valT  = draw(makeText(tostring(math.floor(clr*255)), rsX + rsW + 2, sy - 1, 10, Theme.TextSecondary, baseZ+7, false, false))
-            trkBg.Visible=false fill.Visible=false lbl2.Visible=false valT.Visible=false
-            table.insert(objs,trkBg) table.insert(objs,fill) table.insert(objs,lbl2) table.insert(objs,valT)
-            return {_bg=trkBg,_fill=fill,_lbl=lbl2,_val=valT, _x=rsX,_y=sy,_w=rsW,_h=rsH}
-        end
-        local rSlider = makeRGBSlider(rY, color.R, "R")
-        local gSlider = makeRGBSlider(gY, color.G, "G")
-        local bSlider = makeRGBSlider(bY, color.B, "B")
-
-        -- HEX label
+        -- ── RGB +/- steppers (right side of panel) ───────────────────────
         local function colorToHex(c)
             return string.format("#%02X%02X%02X", math.floor(c.R*255), math.floor(c.G*255), math.floor(c.B*255))
         end
-        local hexLabel = draw(makeText(colorToHex(color), rsX, bY + rsH + 6, 11, Theme.TextSecondary, baseZ+7, false, false))
+
+        local stepSize = 5   -- how much each +/- click changes the channel value
+
+        local rsObjs = {}   -- all objects in the stepper area (for bulk show/hide)
+        local _rSlider = {_x=0,_y=0,_w=1,_h=1, _bg=nil,_fill=nil,_lbl=nil,_val=nil}
+        local _gSlider = {_x=0,_y=0,_w=1,_h=1, _bg=nil,_fill=nil,_lbl=nil,_val=nil}
+        local _bSlider = {_x=0,_y=0,_w=1,_h=1, _bg=nil,_fill=nil,_lbl=nil,_val=nil}
+
+        -- Layout for each channel row: label | value | [-] [+]
+        local channels   = {"R","G","B"}
+        local channelSliders = {}
+        local btnObjs = {}   -- {_x,_y,_w,_h,_ch,_dir} for hit testing
+
+        for ci, ch in ipairs(channels) do
+            local rowY = panelY + 4 + (ci-1) * 22
+            local lbl2 = draw(makeText(ch, rsAreaX + 4, rowY + 4, 12, Theme.TextSecondary, baseZ+52, false, false))
+            lbl2.Visible = false
+            table.insert(objs, lbl2)
+
+            local initV = math.floor((ch=="R" and color.R or ch=="G" and color.G or color.B) * 255)
+            local valT  = draw(makeText(tostring(initV), rsAreaX + 18, rowY + 4, 12, Theme.TextPrimary, baseZ+52, false, false))
+            valT.Visible = false
+            table.insert(objs, valT)
+
+            -- [-] button
+            local minBg  = draw(makeRect(rsAreaX + 50, rowY + 2, 12, 14, Theme.InputBg, baseZ+52, true))
+            local minTx2 = draw(makeText("-", rsAreaX + 53, rowY + 4, 12, Theme.TextPrimary, baseZ+53, false, false))
+            minBg.Visible = false minTx2.Visible = false
+            table.insert(objs, minBg) table.insert(objs, minTx2)
+
+            -- [+] button
+            local plusBg  = draw(makeRect(rsAreaX + 65, rowY + 2, 12, 14, Theme.InputBg, baseZ+52, true))
+            local plusTx2 = draw(makeText("+", rsAreaX + 67, rowY + 4, 12, Theme.TextPrimary, baseZ+53, false, false))
+            plusBg.Visible = false plusTx2.Visible = false
+            table.insert(objs, plusBg) table.insert(objs, plusTx2)
+
+            local slDummy = {_bg=minBg,_fill=minBg,_lbl=lbl2,_val=valT,
+                             _x=rsAreaX,_y=rowY,_w=rsAreaW,_h=14}
+            channelSliders[ch] = {_lbl=lbl2,_val=valT,_rowY=rowY,
+                _minBg=minBg,_minTx=minTx2,_plusBg=plusBg,_plusTx=plusTx2}
+            table.insert(btnObjs, {_x=rsAreaX+50,_y=rowY+2,_w=12,_h=14,_ch=ch,_dir=-1,_bg=minBg})
+            table.insert(btnObjs, {_x=rsAreaX+65,_y=rowY+2,_w=12,_h=14,_ch=ch,_dir=1, _bg=plusBg})
+
+            if ch=="R" then _rSlider = slDummy
+            elseif ch=="G" then _gSlider = slDummy
+            else _bSlider = slDummy end
+        end
+
+        -- Hex label + small live preview patch (bottom of stepper area)
+        local hexLblY  = panelY + 4 + 3*22 + 4
+        local hexLabel = draw(makeText(colorToHex(color), rsAreaX + 2, hexLblY, 10, Theme.TextSecondary, baseZ+52, false, false))
         hexLabel.Visible = false
         table.insert(objs, hexLabel)
 
+        local prevPatch = draw(makeRect(rsAreaX + 2, hexLblY + 14, rsAreaW - 4, 16, color, baseZ+52, true))
+        prevPatch.Visible = false
+        table.insert(objs, prevPatch)
+
         registerElem(cat, objs, rowH)
 
-        -- Internal update: rebuild SV square colors when hue changes
-        local function refreshSVSquare()
-            for _, sv in ipairs(svRects) do
-                sv._r.Color = hsv2rgb(_cpHue, sv._s, sv._v)
-            end
-        end
+        -- refreshAll: sync all UI to current color
         local function refreshAll()
-            local c = hsv2rgb(_cpHue, _cpSat, _cpVal)
-            color = c
-            preview.Color = c
-            -- update rgb sliders fill widths and value labels
-            rSlider._fill.Size = Vector2.new(math.max(1, rsW * c.R), rsH)
-            gSlider._fill.Size = Vector2.new(math.max(1, rsW * c.G), rsH)
-            bSlider._fill.Size = Vector2.new(math.max(1, rsW * c.B), rsH)
-            rSlider._val.Text = tostring(math.floor(c.R * 255))
-            gSlider._val.Text = tostring(math.floor(c.G * 255))
-            bSlider._val.Text = tostring(math.floor(c.B * 255))
-            hexLabel.Text = colorToHex(c)
-            -- hue cursor
-            local hcx = hueBarX + math.floor(_cpHue * hueBarW) - 1
-            hueCursor.Position = Vector2.new(hcx, hueBarY - 2)
-            -- sv cursor
-            local svW2 = svSz * 1.5 - svCellW
-            local svH2 = svSz - svCellH
-            local scx  = svX + math.floor(_cpSat * svW2) - 3
-            local scy  = svY + math.floor((1 - _cpVal) * svH2) - 3
-            svCursor.Position = Vector2.new(scx, scy)
-            if callback then pcall(callback, c) end
+            preview.Color    = color
+            prevPatch.Color  = color
+            hexLabel.Text    = colorToHex(color)
+            local rv = math.floor(color.R*255)
+            local gv = math.floor(color.G*255)
+            local bv = math.floor(color.B*255)
+            if channelSliders["R"] then channelSliders["R"]._val.Text = tostring(rv) end
+            if channelSliders["G"] then channelSliders["G"]._val.Text = tostring(gv) end
+            if channelSliders["B"] then channelSliders["B"]._val.Text = tostring(bv) end
+            if callback then pcall(callback, color) end
         end
-
-        local _cpOpen    = false
-        local _cpDragHue = false
-        local _cpDragR   = false
-        local _cpDragG   = false
-        local _cpDragB   = false
-        local _cpDragSV  = false
 
         local elem = {
             Type="ColorPicker", _bg=bg, _draws=objs,
             _x=cx+cw-54, _y=cy, _w=54, _h=rowH,
             _arrowX=cx+cw-28, _arrowY=cy+4, _arrowW=22, _arrowH=22,
             _headerX=cx, _headerY=cy, _headerW=cw, _headerH=rowH,
-            _panelBg=panelBg,
-            _panelY=cy+rowH, _panelH=panelH,
-            _hueBarX=hueBarX, _hueBarY=hueBarY, _hueBarW=hueBarW, _hueBarH=hueBarH,
-            _hueRects=hueRects, _hueCursor=hueCursor,
-            _svRects=svRects, _svCursor=svCursor,
-            _svX=svX, _svY=svY, _svSz=svSz, _svCellW=svCellW, _svCellH=svCellH,
-            _rSlider=rSlider, _gSlider=gSlider, _bSlider=bSlider,
+            _panelBg=panelBg, _panelBorder=panelBorder,
+            _panelX=panelX, _panelY=panelY, _panelW=panelW, _panelH=panelH+4,
+            _hueRects={}, _hueCursor=panelBorder,   -- stubs so closeCP helper works
+            _svRects={}, _svCursor=panelBorder,
+            _rSlider=_rSlider, _gSlider=_gSlider, _bSlider=_bSlider,
             _hexLabel=hexLabel,
             _preview=preview, _arrowTxt=arrowTxt,
-            _swatches={},   -- kept for reposition compatibility
+            _paletteSwatch=paletteSwatches,
+            _channelSliders=channelSliders,
+            _btnObjs=btnObjs,
+            _prevPatch=prevPatch,
+            _swatches={},
             _cpOpen=false,
             _cpDragHue=false, _cpDragR=false, _cpDragG=false, _cpDragB=false, _cpDragSV=false,
             Color=color,
-            _cpHue=_cpHue, _cpSat=_cpSat, _cpVal=_cpVal,
-            _refreshSV=refreshSVSquare, _refreshAll=refreshAll,
-            _rsW=rsW, _rsH=rsH, _rsX=rsX,
+            _cpHue=0, _cpSat=1, _cpVal=1,
+            _refreshSV=function() end, _refreshAll=refreshAll,
+            _rsW=rsAreaW, _rsH=14, _rsX=rsAreaX,
             Callback=callback,
         }
         registerElemDesc(cat, elem)
@@ -1684,116 +1708,75 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- COLOR PICKER: header click toggles panel, hue/sv/rgb drag
+                    -- COLOR PICKER: header click toggles panel, palette swatch click, +/- steppers
                     if elem.Type == "ColorPicker" then
+                        local function setPanelVis(state)
+                            elem._panelBg.Visible     = state
+                            elem._panelBorder.Visible = state
+                            for _, sw in ipairs(elem._paletteSwatch or {}) do
+                                pcall(function() sw._r.Visible = state end)
+                            end
+                            local cs = elem._channelSliders or {}
+                            for _, ch in ipairs({"R","G","B"}) do
+                                local s = cs[ch]
+                                if s then
+                                    s._lbl.Visible=state s._val.Visible=state
+                                    s._minBg.Visible=state s._minTx.Visible=state
+                                    s._plusBg.Visible=state s._plusTx.Visible=state
+                                end
+                            end
+                            elem._hexLabel.Visible  = state
+                            elem._prevPatch.Visible = state
+                        end
+
                         -- Toggle open/close on header click
                         if _mouseJustDown and inBounds(mPos.X, mPos.Y, elem._headerX, elem._headerY, elem._headerW, elem._headerH) then
                             elem._cpOpen = not elem._cpOpen
-                            elem._arrowTxt.Text = elem._cpOpen and "^" or "v"
-                            -- Show/hide all panel objects
-                            local function setPanelVis(state)
-                                for _, r in ipairs(elem._hueRects) do r.Visible = state end
-                                elem._hueCursor.Visible = state
-                                for _, sv in ipairs(elem._svRects) do sv._r.Visible = state end
-                                elem._svCursor.Visible = state
-                                elem._rSlider._bg.Visible = state
-                                elem._rSlider._fill.Visible = state
-                                elem._rSlider._lbl.Visible = state
-                                elem._rSlider._val.Visible = state
-                                elem._gSlider._bg.Visible = state
-                                elem._gSlider._fill.Visible = state
-                                elem._gSlider._lbl.Visible = state
-                                elem._gSlider._val.Visible = state
-                                elem._bSlider._bg.Visible = state
-                                elem._bSlider._fill.Visible = state
-                                elem._bSlider._lbl.Visible = state
-                                elem._bSlider._val.Visible = state
-                                elem._panelBg.Visible = state
-                                elem._hexLabel.Visible = state
-                            end
+                            elem._arrowTxt.Text = elem._cpOpen and "<" or ">"
                             setPanelVis(elem._cpOpen)
                         end
 
                         if elem._cpOpen then
-                            -- Start hue bar drag
-                            if _mouseJustDown and inBounds(mPos.X, mPos.Y,
-                                elem._hueBarX, elem._hueBarY - 4, elem._hueBarW, elem._hueBarH + 8) then
-                                elem._cpDragHue = true
-                            end
-                            -- Start SV square drag
-                            local svW2 = elem._svSz * 1.5
-                            if _mouseJustDown and inBounds(mPos.X, mPos.Y,
-                                elem._svX, elem._svY, svW2, elem._svSz) then
-                                elem._cpDragSV = true
-                            end
-                            -- Start RGB slider drags
-                            local function checkSliderStart(sl)
-                                if _mouseJustDown and inBounds(mPos.X, mPos.Y,
-                                    sl._x, sl._y - 4, sl._w, sl._h + 8) then
-                                    return true
+                            -- Close panel if click is outside both header and panel
+                            if _mouseJustDown then
+                                local inHeader = inBounds(mPos.X, mPos.Y, elem._headerX, elem._headerY, elem._headerW, elem._headerH)
+                                local inPanel  = inBounds(mPos.X, mPos.Y, elem._panelX, elem._panelY, elem._panelW, elem._panelH)
+                                if not inHeader and not inPanel then
+                                    elem._cpOpen = false
+                                    elem._arrowTxt.Text = ">"
+                                    setPanelVis(false)
                                 end
-                                return false
-                            end
-                            if checkSliderStart(elem._rSlider) then elem._cpDragR = true end
-                            if checkSliderStart(elem._gSlider) then elem._cpDragG = true end
-                            if checkSliderStart(elem._bSlider) then elem._cpDragB = true end
-
-                            -- Release drags
-                            if _mouseJustUp then
-                                elem._cpDragHue = false
-                                elem._cpDragSV  = false
-                                elem._cpDragR   = false
-                                elem._cpDragG   = false
-                                elem._cpDragB   = false
                             end
 
-                            -- Hue drag
-                            if elem._cpDragHue and mouse1 then
-                                local pct = math.max(0, math.min(1, (mPos.X - elem._hueBarX) / elem._hueBarW))
-                                elem._cpHue = pct
-                                elem._refreshSV()
-                                elem._refreshAll()
-                            end
-
-                            -- SV drag
-                            if elem._cpDragSV and mouse1 then
-                                local svW2 = elem._svSz * 1.5
-                                local pctS = math.max(0, math.min(1, (mPos.X - elem._svX) / svW2))
-                                local pctV = 1 - math.max(0, math.min(1, (mPos.Y - elem._svY) / elem._svSz))
-                                elem._cpSat = pctS
-                                elem._cpVal = pctV
-                                elem._refreshAll()
-                            end
-
-                            -- RGB slider drag helper
-                            local function dragRGBSlider(sl, channel)
-                                local pct = math.max(0, math.min(1, (mPos.X - sl._x) / sl._w))
-                                local c   = elem.Color
-                                local nr  = channel == "R" and pct or c.R
-                                local ng  = channel == "G" and pct or c.G
-                                local nb  = channel == "B" and pct or c.B
-                                local nc  = Color3.fromRGB(nr*255, ng*255, nb*255)
-                                -- Convert back to HSV to keep pickers in sync
-                                local nh, ns, nv = nc.R, nc.G, nc.B
-                                -- simple approach: update color directly then re-derive HSV
-                                elem.Color = nc
-                                elem._preview.Color = nc
-                                sl._fill.Size = Vector2.new(math.max(1, sl._w * pct), sl._h)
-                                sl._val.Text  = tostring(math.floor(pct * 255))
-                                if channel == "R" then
-                                    elem._rSlider._fill.Size = Vector2.new(math.max(1, sl._w * nr), sl._h)
-                                elseif channel == "G" then
-                                    elem._gSlider._fill.Size = Vector2.new(math.max(1, sl._w * ng), sl._h)
-                                else
-                                    elem._bSlider._fill.Size = Vector2.new(math.max(1, sl._w * nb), sl._h)
+                            -- Palette swatch click
+                            if _mouseJustDown then
+                                for _, sw in ipairs(elem._paletteSwatch or {}) do
+                                    if inBounds(mPos.X, mPos.Y, sw._x, sw._y, sw._w, sw._h) then
+                                        elem.Color = sw._color
+                                        elem._refreshAll()
+                                        break
+                                    end
                                 end
-                                elem._hexLabel.Text = string.format("#%02X%02X%02X",
-                                    math.floor(nr*255), math.floor(ng*255), math.floor(nb*255))
-                                if elem.Callback then pcall(elem.Callback, nc) end
                             end
-                            if elem._cpDragR and mouse1 then dragRGBSlider(elem._rSlider, "R") end
-                            if elem._cpDragG and mouse1 then dragRGBSlider(elem._gSlider, "G") end
-                            if elem._cpDragB and mouse1 then dragRGBSlider(elem._bSlider, "B") end
+
+                            -- +/- stepper buttons
+                            if _mouseJustDown then
+                                for _, btn in ipairs(elem._btnObjs or {}) do
+                                    if inBounds(mPos.X, mPos.Y, btn._x, btn._y, btn._w, btn._h) then
+                                        local c  = elem.Color
+                                        local rv = math.floor(c.R*255)
+                                        local gv = math.floor(c.G*255)
+                                        local bv = math.floor(c.B*255)
+                                        local step = 5
+                                        if btn._ch == "R" then rv = math.max(0, math.min(255, rv + btn._dir * step))
+                                        elseif btn._ch == "G" then gv = math.max(0, math.min(255, gv + btn._dir * step))
+                                        else bv = math.max(0, math.min(255, bv + btn._dir * step)) end
+                                        elem.Color = Color3.fromRGB(rv, gv, bv)
+                                        elem._refreshAll()
+                                        break
+                                    end
+                                end
+                            end
                         end
                     end
 
