@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Ay ay ay....")
+print("MatchaUI Library finally working, for now....")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
