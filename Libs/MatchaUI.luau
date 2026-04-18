@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("mmm, monospace")
+print("Mama mia")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -298,6 +298,8 @@ function MatchaUI.CreateWindow(opts)
                     if sw._y then sw._y = sw._y + dy end
                 end
             end
+            -- ScrollFrame scrollbar X anchor
+            if elem._sbX then elem._sbX = elem._sbX + dx end
         end
     end
 
@@ -881,6 +883,7 @@ function MatchaUI.CreateWindow(opts)
             _thumb=thumb, _thumbH=thumbH,
             _innerH=innerH, _scrollY=0,
             _thumbDragging=false, _thumbDragOffY=0,
+            _contentDragging=false, _contentDragStartY=0, _contentDragStartScroll=0,
             _items={},   -- { _txt=DrawObj, _relY=number }
             _itemH=18,
             Callback=callback,
@@ -1365,54 +1368,59 @@ function MatchaUI.Run()
 
                     -- SCROLL FRAME: content drag (anywhere in frame) + scrollbar thumb drag
                     if elem.Type == "ScrollFrame" then
-                        local sbX = elem._sbX or (elem._x + elem._w - 8)
-                        local sbY = elem._y
-                        local sbW = 6
-                        local sbH = elem._h
+                        -- Always derive sbX from elem._sbX (kept in sync by reposition)
+                        local sbX = elem._sbX
+                        local sbW = 8   -- wider hit zone for the scrollbar (matches the track visual)
 
                         if _mouseJustDown then
-                            if inBounds(mPos.X, mPos.Y, sbX, sbY, sbW, sbH) then
-                                -- Clicked on scrollbar thumb/track — start thumb drag
-                                elem._thumbDragging = true
-                                elem._contentDragging = false
-                                -- Offset relative to thumb top so it doesn't jump
-                                local thumbTopY = elem._y + (elem._thumbH < elem._h
-                                    and (elem._scrollY / math.max(1, elem._innerH - elem._h)) * (elem._h - elem._thumbH)
-                                    or 0)
+                            if inBounds(mPos.X, mPos.Y, sbX, elem._y, sbW, elem._h) then
+                                -- Clicked scrollbar track/thumb — thumb drag
+                                elem._thumbDragging    = true
+                                elem._contentDragging  = false
+                                -- Record offset from thumb top so thumb doesn't jump on first frame
+                                local maxScroll  = math.max(1, elem._innerH - elem._h)
+                                local thumbMaxY  = math.max(1, elem._h - elem._thumbH)
+                                local thumbTopY  = elem._y + (elem._scrollY / maxScroll) * thumbMaxY
                                 elem._thumbDragOffY = mPos.Y - thumbTopY
                             elseif inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w - sbW, elem._h) then
-                                -- Clicked inside content area — start content drag
-                                elem._contentDragging = true
-                                elem._thumbDragging = false
-                                elem._contentDragStartY = mPos.Y
+                                -- Clicked content area — content drag
+                                elem._contentDragging       = true
+                                elem._thumbDragging         = false
+                                elem._contentDragStartY     = mPos.Y
                                 elem._contentDragStartScroll = elem._scrollY
                             end
                         end
 
                         if _mouseJustUp then
-                            elem._thumbDragging = false
+                            elem._thumbDragging   = false
                             elem._contentDragging = false
                         end
 
                         if elem._thumbDragging and mouse1 then
                             local maxScroll = math.max(1, elem._innerH - elem._h)
-                            local thumbMaxY = elem._h - elem._thumbH
-                            local rawY      = mPos.Y - (elem._thumbDragOffY or 0)
-                            local clampedY  = math.max(0, math.min(thumbMaxY, rawY - elem._y))
-                            elem._thumb.Position = Vector2.new(sbX, elem._y + clampedY)
-                            local pct       = thumbMaxY > 0 and clampedY / thumbMaxY or 0
-                            elem._scrollY   = pct * maxScroll
+                            local thumbMaxY = math.max(1, elem._h - elem._thumbH)
+                            -- rawY is the desired thumb top in screen space
+                            local rawY     = mPos.Y - elem._thumbDragOffY
+                            -- clamp to [elem._y, elem._y + thumbMaxY]
+                            local clampedY = math.max(elem._y, math.min(elem._y + thumbMaxY, rawY))
+                            -- position thumb at correct X (sbX) and clamped Y
+                            elem._thumb.Position = Vector2.new(sbX, clampedY)
+                            local pct      = (clampedY - elem._y) / thumbMaxY
+                            elem._scrollY  = pct * maxScroll
                             if elem.Callback then pcall(elem.Callback, elem._scrollY) end
                         end
 
                         if elem._contentDragging and mouse1 then
                             local maxScroll = math.max(0, elem._innerH - elem._h)
-                            local dy = elem._contentDragStartY - mPos.Y  -- drag up = positive scroll
+                            -- Drag DOWN  → mPos.Y increases → dy positive → scroll DOWN (higher _scrollY)
+                            local dy = mPos.Y - elem._contentDragStartY
+                            -- Content moves with finger: dragging down reveals items above (scroll up)
+                            -- so invert: dragging down = negative scroll delta
                             local newScroll = math.max(0, math.min(maxScroll,
-                                (elem._contentDragStartScroll or 0) + dy))
+                                elem._contentDragStartScroll - dy))
                             elem._scrollY = newScroll
-                            -- Sync thumb position
-                            local thumbMaxY = elem._h - elem._thumbH
+                            -- Sync thumb
+                            local thumbMaxY = math.max(1, elem._h - elem._thumbH)
                             local pct = maxScroll > 0 and newScroll / maxScroll or 0
                             elem._thumb.Position = Vector2.new(sbX, elem._y + pct * thumbMaxY)
                             if elem.Callback then pcall(elem.Callback, elem._scrollY) end
