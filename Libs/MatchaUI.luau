@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Wonder how this works")
+print("mmm, monospace")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -86,7 +86,7 @@ local function makeText(text, x, y, size, color, zIndex, centered, outline)
     t.ZIndex       = zIndex or 11
     t.Center       = centered or false
     t.Outline      = (outline ~= false)
-    t.Font         = Drawing.Fonts.UI
+    t.Font         = Drawing.Fonts.Monospace
     t.Transparency = 1
     t.Visible      = true
     return t
@@ -931,7 +931,7 @@ function MatchaUI.CreateWindow(opts)
         ttTxt.ZIndex = baseZ + 91
         ttTxt.Center = false
         ttTxt.Outline = true
-        ttTxt.Font  = Drawing.Fonts.UI
+        ttTxt.Font  = Drawing.Fonts.Monospace
         ttTxt.Transparency = 1
         ttTxt.Visible = false
         local tip = {_bg=ttBg, _txt=ttTxt, _elem=elem, Text=tipText}
@@ -1022,7 +1022,7 @@ function MatchaUI.Notify(title, message, duration)
     tTitle.Color       = Theme.AccentOn
     tTitle.ZIndex      = 302
     tTitle.Outline     = true
-    tTitle.Font        = Drawing.Fonts.UI
+    tTitle.Font        = Drawing.Fonts.Monospace
     tTitle.Transparency = 1
     tTitle.Visible     = true
 
@@ -1033,7 +1033,7 @@ function MatchaUI.Notify(title, message, duration)
     tMsg.Color         = Theme.TextPrimary
     tMsg.ZIndex        = 302
     tMsg.Outline       = true
-    tMsg.Font          = Drawing.Fonts.UI
+    tMsg.Font          = Drawing.Fonts.Monospace
     tMsg.Transparency  = 1
     tMsg.Visible       = true
 
