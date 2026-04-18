@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Rollback...")
+print("Asereje je deje")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -1425,6 +1425,7 @@ function MatchaUI.SetFont(fontName)
 end
 
 
+local VALID_CHARS = {}
 do
     local s = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 .,!?-_@#%&*()[]<>:;'/\\"
     for i = 1, #s do
