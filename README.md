@@ -32,7 +32,8 @@ local TabService       = Loader.load("TabService")
 | Loader | Utility to load ForMatcha libraries from GitHub |
 | TweenService | Position animation with easing styles for BasePart instances |
 | CharacterService | Character lifecycle management (spawn, respawn, death) |
-| TabService | Robust tab lifecycle management for Matcha's UI system |
+| TabService | Robust tab lifecycle management for Matcha's UI system | (Dont use this)
+| MatchaUI | UI Library for matcha |
 
 ## Per-library usage
 
@@ -68,40 +69,5 @@ local charService      = CharacterService.new(Players.LocalPlayer)
 
 charService:OnCharacterAdded(function(character)
     print("Respawned as: " .. character.Name)
-end)
-```
-
-### TabService — create a managed tab with async loading
-(Do not use this shit, need fixs)
-```lua
-local TabService = Loader.load("TabService")
-
-local tab = TabService.new("My Hub")
-
-tab:setBuilder(function(ctx)
-    local left  = ctx:leftSection("Options", {"General", "Advanced"})
-    local right = ctx:rightSection("Info")
-
-    if left.page == 0 then
-        left:inputText("query", "Search...", "")
-        left:spacing()
-        left:button("Execute", 200, 34, function()
-            -- logic here
-        end)
-    elseif left.page == 1 then
-        left:combo("sort", "Order", {"A-Z", "Z-A"}, ctx:get("sort") or 0)
-    end
-
-    local q = ctx:get("query") or ""
-    right:text("Query: " .. q)
-end)
-
-tab:mount()
-
-task.spawn(function()
-    -- async setup (HTTP, parsing, etc.)
-    task.wait(2)
-    tab:ready()
-    tab:notify("Hub ready")
 end)
 ```
