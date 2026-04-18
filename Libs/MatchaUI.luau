@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("mamaaaaaaaaaaaaaaaaaaaaaaaaa")
+print("Ay ay ay....")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -950,9 +950,20 @@ function MatchaUI.CreateWindow(opts)
         -- panelObjs: panel-only objects — excluded from ScrollFrame clipping.
         -- Their visibility is controlled exclusively by _cpOpen toggle logic.
         local panelObjs = {}
+        -- panelObjOffsets: parallel table storing each panelObj's position
+        -- relative to (panelX, panelY) at build time. Used by the open logic
+        -- to SET absolute positions without accumulating repeated deltas.
+        local panelObjOffsets = {}
         local function addPanelObj(o)
             table.insert(panelObjs, o)
             table.insert(objs, o)
+            -- Record relative offset from panel origin at the moment of construction
+            pcall(function()
+                table.insert(panelObjOffsets, {
+                    dx = o.Position.X - panelX,
+                    dy = o.Position.Y - panelY,
+                })
+            end)
             return o
         end
 
@@ -1146,6 +1157,8 @@ function MatchaUI.CreateWindow(opts)
             _panelBg=panelBg, _panelBorder=panelBorder,
             _panelX=panelX, _panelY=panelY, _panelW=panelW, _panelH=panelH+4,
             _panelObjs=panelObjs,
+            _panelObjOffsets=panelObjOffsets,  -- relative offsets from panel origin at build time
+            _buildPanelX=panelX, _buildPanelY=panelY,  -- panel origin at build time (never changes)
             _hueRects={}, _hueCursor=panelBorder,
             _svRects={}, _svCursor=panelBorder,
             _rSlider=_rSlider, _gSlider=_gSlider, _bSlider=_bSlider,
@@ -1165,6 +1178,24 @@ function MatchaUI.CreateWindow(opts)
             _rsW=rsAreaW, _rsH=14, _rsX=rsAreaX,
             Callback=callback,
         }
+        -- Store original swatch hit-test coords relative to panel origin
+        for _, sw in ipairs(paletteSwatches) do
+            sw._origDX = sw._x - panelX
+            sw._origDY = sw._y - panelY
+        end
+        -- Store original btn hit-test coords relative to panel origin
+        for _, btn in ipairs(btnObjs) do
+            btn._origDX = btn._x - panelX
+            btn._origDY = btn._y - panelY
+            if btn._trackX then btn._origTrackDX = btn._trackX - panelX end
+            if btn._knobY  then btn._origKnobDY  = btn._knobY  - panelY end
+        end
+        -- Store original channelSlider coords relative to panel origin
+        for _, s in pairs(channelSliders) do
+            if s._trackX then s._origTrackDX = s._trackX - panelX end
+            if s._knobY  then s._origKnobDY  = s._knobY  - panelY end
+            if s._rowY   then s._origRowDY   = s._rowY   - panelY end
+        end
         -- Wire forward ref so refreshAll can read elem.Color
         _elemRef.Color          = nil   -- will be kept in sync via elem.Color
         _elemRef._channelSliders = channelSliders
@@ -1406,6 +1437,31 @@ function MatchaUI.CreateWindow(opts)
             if builtElem.Type == "Dropdown" and builtElem._itemObjs then
                 for _, item in ipairs(builtElem._itemObjs) do
                     if item._y then item._y = item._y + dyFix end
+                end
+            end
+
+            -- For ColorPicker inside ScrollFrame: store the BASE Y of the header row
+            -- (after dyFix is applied) so the scroll loop can SET (not accumulate) absolute
+            -- hit-test coords every frame. Accumulating dy each frame causes unbounded drift.
+            if builtElem.Type == "ColorPicker" then
+                -- _headerY has already been patched above via the generic _y patch? No —
+                -- _headerY is a separate field. Patch it now and store as base.
+                if builtElem._headerY then
+                    builtElem._headerY = builtElem._headerY + dyFix
+                end
+                -- _origHeaderY: the Y the header sits at when scrollY==0 and relY is at top.
+                -- We store it AFTER dyFix so it matches the frame-relative position.
+                builtElem._origHeaderY = builtElem._headerY  -- absolute Y when scrollY=0
+
+                -- Also patch btnObjs and channelSliders Y by dyFix
+                for _, btn in ipairs(builtElem._btnObjs or {}) do
+                    if btn._y then btn._y = btn._y + dyFix end
+                    if btn._knobY then btn._knobY = btn._knobY + dyFix end
+                end
+                local cs = builtElem._channelSliders or {}
+                for _, s in pairs(cs) do
+                    if s._knobY then s._knobY = s._knobY + dyFix end
+                    if s._rowY  then s._rowY  = s._rowY  + dyFix end
                 end
             end
 
@@ -2016,53 +2072,54 @@ function MatchaUI.Run()
                                 -- the _bg has been shifted by AddWidget + scroll, but panelX/panelY
                                 -- were baked in at build time using the raw category cursor position.
                                 local bgPos  = elem._bg.Position
-                                local bgSize = elem._bg.Size
-                                -- Panel anchors to the right of the window; derive window right edge
-                                -- from the bg's current X minus its offset within the content area.
-                                -- Simpler: just place the panel to the right of the window's right edge.
-                                -- We know ww and win.X from the closure; they may have changed via drag.
                                 local newPanelX = win.X + win.W + 4
                                 local newPanelY = bgPos.Y  -- vertically aligned with the header row
 
-                                -- Shift the panel background and border
-                                local pdx = newPanelX - elem._panelX
-                                local pdy = newPanelY - elem._panelY
-                                elem._panelX = newPanelX
-                                elem._panelY = newPanelY
-
+                                -- SET panel background and border to absolute position
                                 pcall(function()
                                     elem._panelBg.Position     = Vector2.new(newPanelX, newPanelY)
                                     elem._panelBorder.Position = Vector2.new(newPanelX, newPanelY)
                                 end)
 
-                                -- Shift all panelObjs by the same delta
-                                for _, po in ipairs(elem._panelObjs or {}) do
-                                    pcall(function()
-                                        po.Position = po.Position + Vector2.new(pdx, pdy)
-                                    end)
+                                -- Position ALL panelObjs using stored relative offsets from build time.
+                                -- This is an absolute SET — safe to call on every open without drift.
+                                local offsets = elem._panelObjOffsets or {}
+                                for i, po in ipairs(elem._panelObjs or {}) do
+                                    local off = offsets[i]
+                                    if off then
+                                        pcall(function()
+                                            po.Position = Vector2.new(newPanelX + off.dx, newPanelY + off.dy)
+                                        end)
+                                    end
                                 end
 
-                                -- Rebuild swatch hit-test coords
+                                -- SET swatch hit-test coords absolutely from panel origin
                                 for _, sw in ipairs(elem._paletteSwatch or {}) do
-                                    sw._x = sw._x + pdx
-                                    sw._y = sw._y + pdy
+                                    if sw._origDX then
+                                        sw._x = newPanelX + sw._origDX
+                                        sw._y = newPanelY + sw._origDY
+                                    end
                                 end
 
-                                -- Rebuild channel slider hit-test coords
+                                -- SET channel slider hit-test coords absolutely
                                 local cs = elem._channelSliders or {}
                                 for _, s in pairs(cs) do
-                                    if s._trackX then s._trackX = s._trackX + pdx end
-                                    if s._knobY  then s._knobY  = s._knobY  + pdy end
-                                    if s._rowY   then s._rowY   = s._rowY   + pdy end
+                                    if s._origTrackDX then s._trackX = newPanelX + s._origTrackDX end
+                                    if s._origKnobDY  then s._knobY  = newPanelY + s._origKnobDY  end
+                                    if s._origRowDY   then s._rowY   = newPanelY + s._origRowDY   end
                                 end
 
-                                -- Rebuild btnObjs hit-test coords
+                                -- SET btnObjs hit-test coords absolutely
                                 for _, btn in ipairs(elem._btnObjs or {}) do
-                                    btn._x = btn._x + pdx
-                                    btn._y = btn._y + pdy
-                                    if btn._trackX then btn._trackX = btn._trackX + pdx end
-                                    if btn._knobY  then btn._knobY  = btn._knobY  + pdy end
+                                    if btn._origDX       then btn._x      = newPanelX + btn._origDX      end
+                                    if btn._origDY       then btn._y      = newPanelY + btn._origDY      end
+                                    if btn._origTrackDX  then btn._trackX = newPanelX + btn._origTrackDX end
+                                    if btn._origKnobDY   then btn._knobY  = newPanelY + btn._origKnobDY  end
                                 end
+
+                                -- Update stored panel position for inBounds checks
+                                elem._panelX = newPanelX
+                                elem._panelY = newPanelY
 
                                 setPanelVis(true)
                             else
@@ -2216,32 +2273,57 @@ function MatchaUI.Run()
                                 local baseAbsY = elem._y + widget._relY - elem._scrollY
                                 local wElem    = widget._elem
                                 local wHeight  = widget._h or ELEM_H
+
+                                -- Compute dy as delta from last known _y to new absolute position.
+                                -- IMPORTANT: dy is used only to SHIFT draw objects. Hit-test coords
+                                -- for ColorPicker are SET absolutely below to avoid drift.
                                 local dy = baseAbsY - (wElem._y or baseAbsY)
-                                -- Shift element descriptor Y fields
-                                if wElem._y then wElem._y = wElem._y + dy end
-                                if wElem._ty then wElem._ty = wElem._ty + dy end
+
+                                -- Shift element descriptor Y fields (used for generic hit-testing)
+                                if wElem._y      then wElem._y      = wElem._y      + dy end
+                                if wElem._ty     then wElem._ty     = wElem._ty     + dy end
                                 if wElem._trackY then wElem._trackY = wElem._trackY + dy end
+
                                 -- BUG 4 FIX: keep Dropdown item hit-test _y in sync with scroll.
-                                -- Without this, clicking options fires at the original Y coords
-                                -- from when the widget was first built, ignoring scroll position.
                                 if wElem.Type == "Dropdown" and wElem._itemObjs then
                                     for _, item in ipairs(wElem._itemObjs) do
                                         if item._y then item._y = item._y + dy end
                                     end
                                 end
-                                -- BUG 4 FIX: keep ColorPicker button/channel-slider hit-test
-                                -- coords in sync with scroll so they fire at the correct position.
-                                if wElem.Type == "ColorPicker" then
-                                    if wElem._headerY then wElem._headerY = wElem._headerY + dy end
-                                    if wElem._arrowY  then wElem._arrowY  = wElem._arrowY  + dy end
+
+                                -- ColorPicker: SET hit-test coords absolutely from relY each frame.
+                                -- Never accumulate — accumulated dy causes unbounded offset drift.
+                                if wElem.Type == "ColorPicker" and wElem._origHeaderY then
+                                    -- How far has the frame scrolled since the widget was built?
+                                    -- scrollDelta = current scrollY (baseAbsY already accounts for it)
+                                    -- The header's absolute Y is simply baseAbsY (frame top + relY - scroll).
+                                    local absHeaderY = baseAbsY  -- same as elem._y + relY - scrollY
+
+                                    -- SET (not add) all ColorPicker hit-test Y coords
+                                    wElem._headerY = absHeaderY
+                                    wElem._y       = absHeaderY  -- keep in sync with generic _y too
+
+                                    -- Compute offset of btnObjs/_channelSliders relative to header
+                                    -- using the original offsets captured at build+dyFix time.
+                                    local origBase = wElem._origHeaderY
+                                    local scrollDelta = absHeaderY - origBase
+
                                     for _, btn in ipairs(wElem._btnObjs or {}) do
-                                        if btn._y then btn._y = btn._y + dy end
-                                        if btn._knobY then btn._knobY = btn._knobY + dy end
+                                        -- btn._y and _knobY were patched to post-dyFix absolute coords.
+                                        -- We need to keep them at origBase + their offset + scrollDelta.
+                                        -- Since we stored them post-dyFix, we can derive original offset:
+                                        if btn._origY == nil then btn._origY = btn._y end
+                                        if btn._origKnobY == nil then btn._origKnobY = btn._knobY end
+                                        if btn._origY    then btn._y    = btn._origY    + scrollDelta end
+                                        if btn._origKnobY then btn._knobY = btn._origKnobY + scrollDelta end
                                     end
+
                                     local cs2 = wElem._channelSliders or {}
                                     for _, s2 in pairs(cs2) do
-                                        if s2._knobY then s2._knobY = s2._knobY + dy end
-                                        if s2._rowY  then s2._rowY  = s2._rowY  + dy end
+                                        if s2._origKnobY == nil then s2._origKnobY = s2._knobY end
+                                        if s2._origRowY  == nil then s2._origRowY  = s2._rowY  end
+                                        if s2._origKnobY then s2._knobY = s2._origKnobY + scrollDelta end
+                                        if s2._origRowY  then s2._rowY  = s2._origRowY  + scrollDelta end
                                     end
                                 end
                                 local pSet = widget._panelObjSet or {}
