@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("Holy 2K lines")
+print("AI have to much bugs :(")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -942,19 +942,20 @@ function MatchaUI.CreateWindow(opts)
         local panelW  = palW + 8 + rsAreaW + 8
         local panelH  = palH + 8    -- a little padding top+bottom
 
-        -- panelObjs: panel-only draw objects (excluded from ScrollFrame clipping)
+        -- panelObjs: panel-only objects — excluded from ScrollFrame clipping.
+        -- Their visibility is controlled exclusively by _cpOpen toggle logic.
         local panelObjs = {}
-        local function drawPanel(obj)
-            table.insert(panelObjs, obj)
-            table.insert(objs, obj)
-            return obj
+        local function addPanelObj(o)
+            table.insert(panelObjs, o)
+            table.insert(objs, o)
+            return o
         end
 
-        local panelBg = drawPanel(draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.DropdownBg, baseZ+50, true)))
+        local panelBg = addPanelObj(draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.DropdownBg, baseZ+50, true)))
         trackTheme("DropdownBg", panelBg)
         panelBg.Visible = false
         -- thin accent border around panel
-        local panelBorder = drawPanel(draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.ElementBorder, baseZ+50, false)))
+        local panelBorder = addPanelObj(draw(makeRect(panelX, panelY, panelW, panelH + 4, Theme.ElementBorder, baseZ+50, false)))
         trackTheme("ElementBorder", panelBorder)
         panelBorder.Filled = false panelBorder.Thickness = 1 panelBorder.Visible = false
 
@@ -987,7 +988,7 @@ function MatchaUI.CreateWindow(opts)
             local r2  = tonumber(hexStr:sub(1,2), 16) or 0
             local g2  = tonumber(hexStr:sub(3,4), 16) or 0
             local b2  = tonumber(hexStr:sub(5,6), 16) or 0
-            local sw  = drawPanel(draw(makeRect(sx, sy, swatchSz, swatchSz, Color3.fromRGB(r2,g2,b2), baseZ+52, true)))
+            local sw  = addPanelObj(draw(makeRect(sx, sy, swatchSz, swatchSz, Color3.fromRGB(r2,g2,b2), baseZ+52, true)))
             sw.Visible = false
             table.insert(paletteSwatches, {_r=sw, _x=sx, _y=sy, _w=swatchSz, _h=swatchSz,
                 _color=Color3.fromRGB(r2,g2,b2)})
@@ -1030,7 +1031,7 @@ function MatchaUI.CreateWindow(opts)
             local lbl2 = draw(makeText(ch, rsAreaX + slPad, rowY + 6, 11,
                 Theme.TextSecondary, baseZ+52, false, false))
             lbl2.Visible = false
-            drawPanel(lbl2)
+            addPanelObj(lbl2)
 
             -- Numeric value display
             local initV = math.floor((ch=="R" and color.R or ch=="G" and color.G or color.B) * 255)
@@ -1038,13 +1039,13 @@ function MatchaUI.CreateWindow(opts)
                 rsAreaX + slPad + lblW + 2, rowY + 6, 11,
                 Theme.TextPrimary, baseZ+52, false, false))
             valT.Visible = false
-            drawPanel(valT)
+            addPanelObj(valT)
 
             -- Slider track background
             local trackBg2 = draw(makeRect(slTrackX, rowY + 8, slTrackW, 4,
                 Theme.SliderTrack, baseZ+52, true))
             trackBg2.Visible = false
-            drawPanel(trackBg2)
+            addPanelObj(trackBg2)
 
             -- Slider fill (channel-colored)
             local initPct  = initV / 255
@@ -1052,7 +1053,7 @@ function MatchaUI.CreateWindow(opts)
             local fillRect2 = draw(makeRect(slTrackX, rowY + 8, initFillW, 4,
                 chFillColors[ch], baseZ+53, true))
             fillRect2.Visible = false
-            drawPanel(fillRect2)
+            addPanelObj(fillRect2)
 
             -- Knob
             local knobX2 = slTrackX + initFillW - knobW2/2
@@ -1060,7 +1061,7 @@ function MatchaUI.CreateWindow(opts)
             local knob2  = draw(makeRect(knobX2, knobY2, knobW2, 14,
                 Theme.SliderKnob, baseZ+54, true))
             knob2.Visible = false
-            drawPanel(knob2)
+            addPanelObj(knob2)
 
             -- Dummy _bg/_fill/_lbl/_val references expected by legacy reset code
             local slInfo = {
@@ -1096,15 +1097,13 @@ function MatchaUI.CreateWindow(opts)
 
         -- Hex label + live preview patch (below the 3 channel rows)
         local hexLblY  = panelY + 4 + 3*chRowH + 4
-        local hexLabel = draw(makeText(colorToHex(color), rsAreaX + slPad, hexLblY, 10,
-            Theme.TextSecondary, baseZ+52, false, false))
+        local hexLabel = addPanelObj(draw(makeText(colorToHex(color), rsAreaX + slPad, hexLblY, 10,
+            Theme.TextSecondary, baseZ+52, false, false)))
         hexLabel.Visible = false
-        drawPanel(hexLabel)
 
-        local prevPatch = draw(makeRect(rsAreaX + slPad, hexLblY + 14, rsAreaW - slPad*2, 14,
-            color, baseZ+52, true))
+        local prevPatch = addPanelObj(draw(makeRect(rsAreaX + slPad, hexLblY + 14, rsAreaW - slPad*2, 14,
+            color, baseZ+52, true)))
         prevPatch.Visible = false
-        drawPanel(prevPatch)
 
         registerElem(cat, objs, rowH)
 
@@ -1141,7 +1140,7 @@ function MatchaUI.CreateWindow(opts)
             _headerX=cx, _headerY=cy, _headerW=cw, _headerH=rowH,
             _panelBg=panelBg, _panelBorder=panelBorder,
             _panelX=panelX, _panelY=panelY, _panelW=panelW, _panelH=panelH+4,
-            _panelObjs=panelObjs,  -- objects excluded from ScrollFrame clipping
+            _panelObjs=panelObjs,
             _hueRects={}, _hueCursor=panelBorder,
             _svRects={}, _svCursor=panelBorder,
             _rSlider=_rSlider, _gSlider=_gSlider, _bSlider=_bSlider,
@@ -1325,8 +1324,12 @@ function MatchaUI.CreateWindow(opts)
             local absY = self._y + relY - self._scrollY
             local dyFix = absY - (builtElem._y or absY)
 
-            -- Build a set of panel-only objects that must never be clipped by the
-            -- ScrollFrame (their visibility is controlled by the ColorPicker toggle).
+            -- Mark this element as living inside a ScrollFrame so the main interaction
+            -- loop uses the frame's visibility, not elem._bg.Visible, as the gate.
+            builtElem._inScrollFrame = true
+
+            -- Build a set of ColorPicker panel objects that must never be clipped by
+            -- the ScrollFrame — their visibility is controlled by _cpOpen exclusively.
             local panelObjSet = {}
             if builtElem._panelObjs then
                 for _, po in ipairs(builtElem._panelObjs) do
@@ -1341,25 +1344,27 @@ function MatchaUI.CreateWindow(opts)
                 for _, o in ipairs(lastObjs) do
                     table.insert(widgetObjs, o)
                     table.insert(objs, o)
-                    -- Panel objects are NOT shifted or clipped — they float outside the frame
-                    if panelObjSet[o] then continue end
-                    -- shift vertically to align inside the scroll frame
-                    pcall(function() o.Position = o.Position + Vector2.new(0, dyFix) end)
-                    -- start clipped
-                    local oAbsY = o.Position.Y
-                    o.Visible = (oAbsY >= self._y) and (oAbsY < self._y + self._h)
+                    if panelObjSet[o] then
+                        -- Panel objects float outside the frame — never shift, never clip.
+                        -- Leave them at Visible=false; _cpOpen toggle controls them.
+                    else
+                        -- shift vertically to align inside the scroll frame
+                        pcall(function() o.Position = o.Position + Vector2.new(0, dyFix) end)
+                        -- start clipped
+                        local oAbsY = o.Position.Y
+                        o.Visible = (oAbsY >= self._y) and (oAbsY < self._y + self._h)
+                    end
                 end
                 -- Remove from cat layout management (we own it now)
                 table.remove(cat._elemObjs, #cat._elemObjs)
             end
 
-            -- Store panelObjSet on the widget descriptor for use in the clipping loop
-            table.insert(self._widgets, {_objs=widgetObjs, _relY=relY, _h=wh, _elem=builtElem, _panelObjSet=panelObjSet})
-
             -- Patch element descriptor Y coordinates to match actual position
             if builtElem._y then builtElem._y = builtElem._y + dyFix end
             if builtElem._ty then builtElem._ty = builtElem._ty + dyFix end
             if builtElem._trackY then builtElem._trackY = builtElem._trackY + dyFix end
+
+            table.insert(self._widgets, {_objs=widgetObjs, _relY=relY, _h=wh, _elem=builtElem, _panelObjSet=panelObjSet})
 
             -- Grow scroll content height
             local totalH = relY + wh + 8
@@ -1751,8 +1756,16 @@ function MatchaUI.Run()
                 for _, elem in ipairs(win._elements) do
                     -- Only process elements belonging to the active category
                     if elem._cat ~= win.ActiveCat then continue end
-                    -- Only process if element visible
-                    if not elem._bg or not elem._bg.Visible then continue end
+                    -- Visibility gate:
+                    -- • Normal elements: skip if their own background is hidden.
+                    -- • Elements inside a ScrollFrame (_inScrollFrame=true): their _bg
+                    --   is clipped by the frame, so we skip this check — the frame's
+                    --   own _bg being visible (guaranteed because it's a cat element) is
+                    --   sufficient. Hit-testing against elem._x/_y/_w/_h still prevents
+                    --   clicks on scrolled-out widgets.
+                    if not elem._inScrollFrame then
+                        if not elem._bg or not elem._bg.Visible then continue end
+                    end
 
                     -- BUTTON
                     if elem.Type == "Button" and _mouseJustDown then
@@ -2034,14 +2047,31 @@ function MatchaUI.Run()
                                 if wElem._trackY then wElem._trackY = wElem._trackY + dy end
                                 local pSet = widget._panelObjSet or {}
                                 for _, obj in ipairs(widget._objs) do
-                                    -- Panel objects (ColorPicker dropdown) are never clipped;
-                                    -- their visibility is managed exclusively by _cpOpen toggle.
+                                    -- Panel objects (ColorPicker popup) float outside the frame.
+                                    -- Skip them here — _cpOpen toggle manages their visibility.
                                     if pSet[obj] then continue end
                                     pcall(function()
                                         obj.Position = obj.Position + Vector2.new(0, dy)
                                         local oY = obj.Position.Y
                                         obj.Visible = (oY >= elem._y) and (oY < elem._y + elem._h)
                                     end)
+                                end
+                                -- Post-clip corrections for sub-objects whose visibility
+                                -- depends on element state, not just position:
+                                if wElem.Type == "Checkbox" and wElem._check then
+                                    -- Clipping unconditionally showed _check; honour State.
+                                    if wElem._check.Visible then
+                                        wElem._check.Visible = wElem.State
+                                    end
+                                end
+                                if wElem.Type == "ColorPicker" and not wElem._cpOpen then
+                                    -- Clipping may have revealed panel objs that slipped
+                                    -- through; force them closed if panel is not open.
+                                    if wElem._panelObjs then
+                                        for _, po in ipairs(wElem._panelObjs) do
+                                            pcall(function() po.Visible = false end)
+                                        end
+                                    end
                                 end
                             end
                         end
