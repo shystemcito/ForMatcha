@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("I have tokens somehow")
+print("Rollback :(")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -2061,12 +2061,6 @@ function MatchaUI.Run()
                                 if wElem._y then wElem._y = wElem._y + dy end
                                 if wElem._ty then wElem._ty = wElem._ty + dy end
                                 if wElem._trackY then wElem._trackY = wElem._trackY + dy end
-                                -- ColorPicker header/arrow hit-test coords must also track scroll
-                                if wElem.Type == "ColorPicker" then
-                                    if wElem._headerY then wElem._headerY = wElem._headerY + dy end
-                                    if wElem._arrowY  then wElem._arrowY  = wElem._arrowY  + dy end
-                                    if wElem._panelY  then wElem._panelY  = wElem._panelY  + dy end
-                                end
                                 local pSet = widget._panelObjSet or {}
                                 for _, obj in ipairs(widget._objs) do
                                     -- Panel objects (ColorPicker popup) float outside the frame.
