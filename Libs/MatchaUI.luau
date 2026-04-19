@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("MatchaUI Library finally working, for now....")
+print("MatchaUI 1.0.0 - shystemmm")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -57,6 +57,11 @@ local _objects  = {}   -- all Drawing objects for cleanup
 local _windows  = {}   -- registered windows
 local _notifs   = {}   -- active notifications
 local _tooltips = {}   -- active tooltips
+
+-- Set to true while any dropdown is open.
+-- While Choosing is true, checkboxes, toggles, textboxes, and other interactive
+-- elements will not respond to input so the dropdown has exclusive focus.
+MatchaUI.Choosing = false
 
 local function newDraw(type)
     local obj = Drawing.new(type)
@@ -113,7 +118,7 @@ end
 -- ─────────────────────────────────────────────────────────────
 -- INPUT STATE
 -- ─────────────────────────────────────────────────────────────
-local Mouse        = game.Players.LocalPlayer:GetMouse()
+local Mouse        = game:GetService("Players").LocalPlayer:GetMouse()
 local _lastMouse1  = false
 local _mouseJustDown  = false
 local _mouseJustUp    = false
@@ -419,7 +424,24 @@ function MatchaUI.CreateWindow(opts)
         if not state and _focusedInput then
             _focusedInput.Focused = false
             if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+            setrobloxinput(true)  -- restore Roblox input when UI hides
             _focusedInput = nil
+        end
+        -- Close any open dropdowns and reset Choosing on hide
+        if not state then
+            MatchaUI.Choosing = false
+            for _, w in ipairs(_windows) do
+                for _, elem in ipairs(w._elements) do
+                    if elem.Type == "Dropdown" and elem._isOpen then
+                        elem._isOpen = false
+                        elem._arrow.Text = "v"
+                        for _, item in ipairs(elem._itemObjs) do
+                            item._bg.Visible  = false
+                            item._txt.Visible = false
+                        end
+                    end
+                end
+            end
         end
     end
 
@@ -482,6 +504,7 @@ function MatchaUI.CreateWindow(opts)
                     if _focusedInput and _focusedInput._cat == cat then
                         _focusedInput.Focused = false
                         if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+                        setrobloxinput(true)
                         _focusedInput = nil
                     end
                 end
@@ -554,6 +577,7 @@ function MatchaUI.CreateWindow(opts)
             if _focusedInput and _focusedInput._cat == win.ActiveCat then
                 _focusedInput.Focused = false
                 if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+                setrobloxinput(true)
                 _focusedInput = nil
             end
         end
@@ -1549,14 +1573,46 @@ end
 -- ─────────────────────────────────────────────────────────────
 -- NOTIFICATION SYSTEM
 -- ─────────────────────────────────────────────────────────────
-local NOTIF_W     = 240
-local NOTIF_H     = 50
-local NOTIF_PAD   = 6
-local NOTIF_DUR   = 4   -- seconds
+local NOTIF_W       = 240
+local NOTIF_PAD     = 6
+local NOTIF_DUR     = 4   -- seconds
+local NOTIF_INNER_W = NOTIF_W - 16   -- 8px padding each side
+-- Approximate character width at size 12 (Monospace). Used for word-wrap.
+local NOTIF_CHAR_W  = 7
 
 -- Notifications spawn at top-left (50, 50) and stack downward.
 local NOTIF_START_X = 50
-local NOTIF_START_Y = 50
+local NOTIF_START_Y = 150
+
+-- Word-wrap a string to fit within maxChars per line.
+-- Returns a table of line strings and the total line count.
+local function _wrapText(text, maxChars)
+    local lines = {}
+    local words = {}
+    for w in (text .. " "):gmatch("([^ ]*) ") do
+        table.insert(words, w)
+    end
+    local line = ""
+    for _, w in ipairs(words) do
+        local candidate = line == "" and w or (line .. " " .. w)
+        if #candidate <= maxChars then
+            line = candidate
+        else
+            if line ~= "" then
+                table.insert(lines, line)
+            end
+            -- If the single word itself exceeds maxChars, hard-break it
+            while #w > maxChars do
+                table.insert(lines, w:sub(1, maxChars))
+                w = w:sub(maxChars + 1)
+            end
+            line = w
+        end
+    end
+    if line ~= "" then table.insert(lines, line) end
+    if #lines == 0 then lines = {""} end
+    return lines
+end
 
 local function _layoutNotifs()
     local by = NOTIF_START_Y
@@ -1564,16 +1620,26 @@ local function _layoutNotifs()
         local n = _notifs[i]
         n._bg.Position    = Vector2.new(NOTIF_START_X, by)
         n._title.Position = Vector2.new(NOTIF_START_X + 8, by + 6)
-        n._msg.Position   = Vector2.new(NOTIF_START_X + 8, by + 22)
-        n._bar.Position   = Vector2.new(NOTIF_START_X, by + NOTIF_H - 4)
-        by = by + NOTIF_H + NOTIF_PAD
+        -- Reposition each wrapped message line
+        for li, lObj in ipairs(n._msgLines) do
+            lObj.Position = Vector2.new(NOTIF_START_X + 8, by + 22 + (li - 1) * 14)
+        end
+        n._bar.Position   = Vector2.new(NOTIF_START_X, by + n._h - 4)
+        by = by + n._h + NOTIF_PAD
     end
 end
 
 function MatchaUI.Notify(title, message, duration)
     local nx  = NOTIF_START_X
-    local ny  = NOTIF_START_Y + #_notifs * (NOTIF_H + NOTIF_PAD)
+    local ny  = NOTIF_START_Y
+    -- Stack below existing notifications (actual Y set by _layoutNotifs)
     local dur = duration or NOTIF_DUR
+
+    -- Pre-calculate wrapped lines so we know how tall the notification must be
+    local maxChars = math.floor(NOTIF_INNER_W / NOTIF_CHAR_W)
+    local msgLines = _wrapText(message or "", maxChars)
+    -- Height: 6 (top pad) + 13 (title) + 3 (gap) + lines*14 + 6 (bottom pad) + 4 (bar)
+    local NOTIF_H = 6 + 13 + 3 + (#msgLines * 14) + 6 + 4
 
     local bg   = newDraw("Square")
     bg.Position    = Vector2.new(nx, ny)
@@ -1583,8 +1649,6 @@ function MatchaUI.Notify(title, message, duration)
     bg.ZIndex      = 300
     bg.Transparency = 1
     bg.Visible     = true
-
-    -- NOTE: vertical accent bar removed; only the horizontal progress bar remains.
 
     local tTitle = newDraw("Text")
     tTitle.Text        = title or "Notice"
@@ -1597,16 +1661,21 @@ function MatchaUI.Notify(title, message, duration)
     tTitle.Transparency = 1
     tTitle.Visible     = true
 
-    local tMsg = newDraw("Text")
-    tMsg.Text          = message or ""
-    tMsg.Position      = Vector2.new(nx+8, ny+22)
-    tMsg.Size          = 12
-    tMsg.Color         = Theme.TextPrimary
-    tMsg.ZIndex        = 302
-    tMsg.Outline       = true
-    tMsg.Font          = Drawing.Fonts.Monospace
-    tMsg.Transparency  = 1
-    tMsg.Visible       = true
+    -- Create one Drawing.Text object per wrapped line
+    local tMsgObjs = {}
+    for li, lineStr in ipairs(msgLines) do
+        local lObj = newDraw("Text")
+        lObj.Text         = lineStr
+        lObj.Position     = Vector2.new(nx+8, ny+22 + (li-1)*14)
+        lObj.Size         = 12
+        lObj.Color        = Theme.TextPrimary
+        lObj.ZIndex       = 302
+        lObj.Outline      = true
+        lObj.Font         = Drawing.Fonts.Monospace
+        lObj.Transparency = 1
+        lObj.Visible      = true
+        table.insert(tMsgObjs, lObj)
+    end
 
     -- Horizontal progress bar (time remaining indicator)
     local bar = newDraw("Square")
@@ -1619,8 +1688,8 @@ function MatchaUI.Notify(title, message, duration)
     bar.Visible    = true
 
     local notif = {
-        _bg=bg, _title=tTitle, _msg=tMsg, _bar=bar,
-        _timer=0, _duration=dur, _done=false,
+        _bg=bg, _title=tTitle, _msgLines=tMsgObjs, _bar=bar,
+        _timer=0, _duration=dur, _done=false, _h=NOTIF_H,
     }
     table.insert(_notifs, notif)
     _layoutNotifs()
@@ -1761,7 +1830,9 @@ function MatchaUI.Run()
                 n._bar.Size = Vector2.new(math.max(0, NOTIF_W * pct), 4)
                 if n._timer >= n._duration then
                     n._bg:Remove()
-                    n._title:Remove() n._msg:Remove() n._bar:Remove()
+                    n._title:Remove()
+                    for _, lObj in ipairs(n._msgLines) do lObj:Remove() end
+                    n._bar:Remove()
                     table.remove(_notifs, i)
                     _layoutNotifs()
                 else
@@ -1797,6 +1868,11 @@ function MatchaUI.Run()
             end
 
             -- ── Per-window processing
+            -- Snapshot Choosing ONCE before any element mutates it this frame.
+            -- This prevents a dropdown close (Choosing→false) mid-loop from
+            -- accidentally allowing other elements to react on the same click.
+            local _choosingThisFrame = MatchaUI.Choosing
+
             for _, win in ipairs(_windows) do
                 if not win.Visible then continue end
 
@@ -1902,15 +1978,15 @@ function MatchaUI.Run()
                         if not inFrame then continue end
                     end
 
-                    -- BUTTON
-                    if elem.Type == "Button" and _mouseJustDown then
+                    -- BUTTON (disabled while a dropdown is open)
+                    if elem.Type == "Button" and _mouseJustDown and not _choosingThisFrame then
                         if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
                             if elem.Callback then pcall(elem.Callback) end
                         end
                     end
 
-                    -- TOGGLE
-                    if elem.Type == "Toggle" and _mouseJustDown then
+                    -- TOGGLE (disabled while a dropdown is open)
+                    if elem.Type == "Toggle" and _mouseJustDown and not _choosingThisFrame then
                         if inBounds(mPos.X, mPos.Y, elem._tx, elem._ty, elem._trackW, elem._trackH) then
                             elem.State = not elem.State
                             elem._track.Color = elem.State and Theme.AccentOn or Theme.AccentOff
@@ -1922,8 +1998,8 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- CHECKBOX
-                    if elem.Type == "Checkbox" and _mouseJustDown then
+                    -- CHECKBOX (disabled while a dropdown is open)
+                    if elem.Type == "Checkbox" and _mouseJustDown and not _choosingThisFrame then
                         if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
                             elem.State = not elem.State
                             elem._check.Visible = elem.State
@@ -1931,8 +2007,8 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- SLIDER drag start
-                    if elem.Type == "Slider" and _mouseJustDown and _sliderDrag == nil then
+                    -- SLIDER drag start (disabled while a dropdown is open)
+                    if elem.Type == "Slider" and _mouseJustDown and _sliderDrag == nil and not _choosingThisFrame then
                         -- click on track or knob
                         if inBounds(mPos.X, mPos.Y, elem._trackX, elem._trackY - 6, elem._trackW, 16) then
                             _sliderDrag = elem
@@ -1945,6 +2021,7 @@ function MatchaUI.Run()
                             -- toggle open
                             elem._isOpen = not elem._isOpen
                             if elem._isOpen then
+                                MatchaUI.Choosing = true
                                 -- Recalculate item positions from the current _bg position so
                                 -- items always appear directly below the box regardless of whether
                                 -- the dropdown lives inside a ScrollFrame or was moved by dragging.
@@ -1967,6 +2044,7 @@ function MatchaUI.Run()
                                     item._txt.Visible = true
                                 end
                             else
+                                MatchaUI.Choosing = false
                                 for _, item in ipairs(elem._itemObjs) do
                                     item._bg.Visible  = false
                                     item._txt.Visible = false
@@ -1986,6 +2064,7 @@ function MatchaUI.Run()
                             end
                             -- close
                             elem._isOpen = false
+                            MatchaUI.Choosing = false
                             elem._arrow.Text = "v"
                             for _, item in ipairs(elem._itemObjs) do
                                 item._bg.Visible  = false
@@ -1997,7 +2076,7 @@ function MatchaUI.Run()
                     -- KEYBIND
                     if elem.Type == "Keybind" then
                         -- Arm on mouse down; only start scanning after mouse is released
-                        if _mouseJustDown and inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
+                        if _mouseJustDown and not _choosingThisFrame and inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
                             elem._pendingListen = true
                             elem.Listening = false
                             elem._kbTxt.Text  = "..."
@@ -2025,19 +2104,39 @@ function MatchaUI.Run()
                         end
                     end
 
-                    -- TEXT INPUT / SEARCH BAR: focus on click
-                    if (elem.Type == "TextInput") and _mouseJustDown then
-                        if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
-                            _focusedInput = elem
-                            elem.Focused   = true
-                            _cursorBlink   = 0
-                            if elem._inputBg then elem._inputBg.Color = Theme.InputBg end
-                        else
-                            if elem == _focusedInput then
+                    -- TEXT INPUT / SEARCH BAR
+                    -- Focus is set on _mouseJustDown (for responsiveness).
+                    -- setrobloxinput(false) is deferred to _mouseJustUp so it takes effect
+                    -- AFTER the click that initiated focus is fully released — calling it
+                    -- mid-mousedown causes Matcha to ignore it for the current press.
+                    if elem.Type == "TextInput" then
+                        if _mouseJustDown and not _choosingThisFrame then
+                            if inBounds(mPos.X, mPos.Y, elem._x, elem._y, elem._w, elem._h) then
+                                -- Clicked inside this input: focus it
+                                if _focusedInput ~= elem then
+                                    -- Blur the previously focused input first
+                                    if _focusedInput then
+                                        _focusedInput.Focused = false
+                                        if _focusedInput._cursor then _focusedInput._cursor.Visible = false end
+                                    end
+                                    _focusedInput = elem
+                                    elem.Focused  = true
+                                    _cursorBlink  = 0
+                                    if elem._inputBg then elem._inputBg.Color = Theme.InputBg end
+                                    -- setrobloxinput(false) deferred to _mouseJustUp below
+                                end
+                            elseif elem == _focusedInput then
+                                -- Clicked outside a currently-focused input: blur it
                                 _focusedInput = nil
                                 elem.Focused  = false
                                 if elem._cursor then elem._cursor.Visible = false end
+                                setrobloxinput(true)
                             end
+                        end
+                        -- Deferred setrobloxinput(false): fires on mouse-release of the
+                        -- click that focused this input, so Matcha honours it correctly.
+                        if _mouseJustUp and elem == _focusedInput then
+                            setrobloxinput(false)
                         end
                     end
 
@@ -2383,8 +2482,8 @@ function MatchaUI.Run()
                     end
                 end
 
-                -- ── Slider drag update (global)
-                if _sliderDrag then
+                -- ── Slider drag update (global, disabled while a dropdown is open)
+                if _sliderDrag and not MatchaUI.Choosing then
                     if mouse1 then
                         local e    = _sliderDrag
                         local relX = math.max(0, math.min(mPos.X - e._trackX, e._trackW))
@@ -2460,6 +2559,7 @@ function MatchaUI.Run()
                             elem.Focused = false
                             if elem._cursor then elem._cursor.Visible = false end
                             _focusedInput = nil
+                            setrobloxinput(true)  -- restore Roblox input on Enter-commit
                             if elem.Callback then pcall(elem.Callback, elem.Text) end
                             handled = true
                         else
