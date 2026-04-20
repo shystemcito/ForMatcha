@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("MatchaUI 1.1.1 - shystemmm")
+print("MatchaUI 1.2.0 - shystemmm")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -827,6 +827,102 @@ function MatchaUI.CreateWindow(opts)
             _isOpen=isOpen, Selected=selected,
             Callback=callback, Options=options or {},
         }
+        -- ── SetOptions: replace the item list of this dropdown at runtime.
+        -- Usage: dropdownElem:SetOptions({"A","B","C"}, "A")
+        -- • Closes the dropdown if open.
+        -- • Removes old item Drawing objects from _objects, _themeObjects, and objs.
+        -- • Creates new items following the exact same pattern as construction time.
+        -- • Updates elem.Options, elem._itemObjs, elem.Selected, and elem._selTxt.
+        -- • newDefault is optional; if omitted defaults to newOpts[1] or "None".
+        function elem:SetOptions(newOpts, newDefault)
+            newOpts = newOpts or {}
+
+            -- 1. Close if currently open
+            if self._isOpen then
+                self._isOpen = false
+                self._arrow.Text = "v"
+                for _, item in ipairs(self._itemObjs) do
+                    item._bg.Visible  = false
+                    item._txt.Visible = false
+                end
+                MatchaUI.Choosing = false
+            end
+
+            -- 2. Remove old item Drawing objects from every registry that holds them.
+            --    objs[1..5] are the fixed draws (bg, lbl, boxBg, selTxt, arrow).
+            --    Items occupy objs[6..end] — strip them.
+            for i = #objs, 6, -1 do
+                local obj = objs[i]
+                -- Remove from global _objects list
+                for gi = #_objects, 1, -1 do
+                    if _objects[gi] == obj then
+                        table.remove(_objects, gi)
+                        break
+                    end
+                end
+                -- Remove from _themeObjects (TextPrimary and DropdownItem)
+                for _, bucket in pairs(_themeObjects) do
+                    for ti = #bucket, 1, -1 do
+                        if bucket[ti] == obj then
+                            table.remove(bucket, ti)
+                            break
+                        end
+                    end
+                end
+                -- Remove from _textObjects so SetFont stops referencing dead objects
+                for xi = #_textObjects, 1, -1 do
+                    if _textObjects[xi] == obj then
+                        table.remove(_textObjects, xi)
+                        break
+                    end
+                end
+                pcall(function() obj:Remove() end)
+                table.remove(objs, i)
+            end
+
+            -- 3. Build new item Drawing objects (mirrors the construction-time loop)
+            local newItemObjs = {}
+            local dropBaseZ   = baseZ + 50
+            for i, opt in ipairs(newOpts) do
+                local iBg  = newDraw("Square")
+                iBg.Position    = Vector2.new(0, 0)
+                iBg.Size        = Vector2.new(122, 22)
+                iBg.Color       = Theme.DropdownItem
+                iBg.ZIndex      = dropBaseZ
+                iBg.Filled      = true
+                iBg.Thickness   = 1
+                iBg.Transparency = 1
+                iBg.Visible     = false
+                trackTheme("DropdownItem", iBg)
+
+                local iTxt = newDraw("Text")
+                iTxt.Text         = tostring(opt)
+                iTxt.Position     = Vector2.new(0, 0)
+                iTxt.Size         = 12
+                iTxt.Color        = Theme.TextPrimary
+                iTxt.ZIndex       = dropBaseZ + 1
+                iTxt.Center       = false
+                iTxt.Outline      = true
+                iTxt.Font         = _currentFont
+                iTxt.Transparency = 1
+                iTxt.Visible      = false
+                trackTheme("TextPrimary", iTxt)
+                table.insert(_textObjects, iTxt)
+
+                table.insert(newItemObjs, {_bg=iBg, _txt=iTxt, _value=opt, _x=0, _y=0, _idx=i})
+                table.insert(objs, iBg)
+                table.insert(objs, iTxt)
+            end
+
+            -- 4. Update the element descriptor
+            self._itemObjs = newItemObjs
+            self.Options   = newOpts
+
+            local sel = newDefault or newOpts[1] or "None"
+            self.Selected      = sel
+            self._selTxt.Text  = sel
+        end
+
         registerElemDesc(cat, elem)
         return elem
     end
