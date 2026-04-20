@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("MatchaUI 1.1.0 - shystemmm")
+print("MatchaUI 1.1.1 - shystemmm")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -1713,6 +1713,153 @@ function MatchaUI.Notify(title, message, duration)
 end
 
 -- ─────────────────────────────────────────────────────────────
+-- DEFAULT BUILT-IN PRESETS
+-- Used by AddConfigPreset when no presets table is supplied.
+-- ─────────────────────────────────────────────────────────────
+local DEFAULT_PRESETS = {
+    ["Default (Lime)"] = {
+        accent        = Color3.fromRGB(57, 255, 20),
+        Background    = Color3.fromHex("#0A0A0A"),
+        TopBar        = Color3.fromHex("#111111"),
+        LeftBar       = Color3.fromHex("#141414"),
+        CategoryHover = Color3.fromHex("#1F1F1F"),
+        CategoryText  = Color3.fromHex("#FFFFFF"),
+        ContentBg     = Color3.fromHex("#0A0A0A"),
+        ElementBg     = Color3.fromHex("#141414"),
+        ElementBorder = Color3.fromHex("#2A2A2A"),
+        AccentOff     = Color3.fromHex("#2A2A2A"),
+        TextPrimary   = Color3.fromHex("#FFFFFF"),
+        TextSecondary = Color3.fromHex("#AAAAAA"),
+        TextDisabled  = Color3.fromHex("#555555"),
+        SliderTrack   = Color3.fromHex("#2A2A2A"),
+        SliderKnob    = Color3.fromHex("#FFFFFF"),
+        DropdownBg    = Color3.fromHex("#111111"),
+        DropdownItem  = Color3.fromHex("#0A0A0A"),
+        DropdownHover = Color3.fromHex("#1F1F1F"),
+        InputBg       = Color3.fromHex("#0D0D0D"),
+        TooltipBg     = Color3.fromHex("#050505"),
+        NotifBg       = Color3.fromHex("#111111"),
+        ScrollBar     = Color3.fromHex("#1A1A1A"),
+        TitleText     = Color3.fromHex("#FFFFFF"),
+        CloseBtn      = Color3.fromHex("#CC2200"),
+        MinimizeBtn   = Color3.fromHex("#444444"),
+        SectionHeader = Color3.fromHex("#1A1A1A"),
+    },
+    ["Crimson"] = {
+        accent        = Color3.fromRGB(220, 40, 60),
+        Background    = Color3.fromHex("#0D0005"),
+        TopBar        = Color3.fromHex("#1A000A"),
+        LeftBar       = Color3.fromHex("#200010"),
+        CategoryHover = Color3.fromHex("#30001A"),
+        CategoryText  = Color3.fromHex("#FFD0D8"),
+        ContentBg     = Color3.fromHex("#0D0005"),
+        ElementBg     = Color3.fromHex("#1A000A"),
+        ElementBorder = Color3.fromHex("#440020"),
+        AccentOff     = Color3.fromHex("#440020"),
+        TextPrimary   = Color3.fromHex("#FFE8EC"),
+        TextSecondary = Color3.fromHex("#CC8899"),
+        TextDisabled  = Color3.fromHex("#663344"),
+        SliderTrack   = Color3.fromHex("#440020"),
+        SliderKnob    = Color3.fromHex("#FFE8EC"),
+        DropdownBg    = Color3.fromHex("#1A000A"),
+        DropdownItem  = Color3.fromHex("#0D0005"),
+        DropdownHover = Color3.fromHex("#30001A"),
+        InputBg       = Color3.fromHex("#110008"),
+        TooltipBg     = Color3.fromHex("#080003"),
+        NotifBg       = Color3.fromHex("#1A000A"),
+        ScrollBar     = Color3.fromHex("#250010"),
+        TitleText     = Color3.fromHex("#FFE8EC"),
+        CloseBtn      = Color3.fromHex("#AA0010"),
+        MinimizeBtn   = Color3.fromHex("#550022"),
+        SectionHeader = Color3.fromHex("#250010"),
+    },
+    ["Ocean"] = {
+        accent        = Color3.fromRGB(0, 180, 255),
+        Background    = Color3.fromHex("#030D12"),
+        TopBar        = Color3.fromHex("#061520"),
+        LeftBar       = Color3.fromHex("#081C28"),
+        CategoryHover = Color3.fromHex("#0E2A38"),
+        CategoryText  = Color3.fromHex("#C8EEFF"),
+        ContentBg     = Color3.fromHex("#030D12"),
+        ElementBg     = Color3.fromHex("#061520"),
+        ElementBorder = Color3.fromHex("#0A3048"),
+        AccentOff     = Color3.fromHex("#0A3048"),
+        TextPrimary   = Color3.fromHex("#E0F6FF"),
+        TextSecondary = Color3.fromHex("#7ABFDD"),
+        TextDisabled  = Color3.fromHex("#2A6680"),
+        SliderTrack   = Color3.fromHex("#0A3048"),
+        SliderKnob    = Color3.fromHex("#E0F6FF"),
+        DropdownBg    = Color3.fromHex("#061520"),
+        DropdownItem  = Color3.fromHex("#030D12"),
+        DropdownHover = Color3.fromHex("#0E2A38"),
+        InputBg       = Color3.fromHex("#04101A"),
+        TooltipBg     = Color3.fromHex("#020809"),
+        NotifBg       = Color3.fromHex("#061520"),
+        ScrollBar     = Color3.fromHex("#0A1E2A"),
+        TitleText     = Color3.fromHex("#E0F6FF"),
+        CloseBtn      = Color3.fromHex("#CC2200"),
+        MinimizeBtn   = Color3.fromHex("#1A4A60"),
+        SectionHeader = Color3.fromHex("#0A1E2A"),
+    },
+    ["Sunset"] = {
+        accent        = Color3.fromRGB(255, 120, 0),
+        Background    = Color3.fromHex("#0D0500"),
+        TopBar        = Color3.fromHex("#1A0A00"),
+        LeftBar       = Color3.fromHex("#221000"),
+        CategoryHover = Color3.fromHex("#331800"),
+        CategoryText  = Color3.fromHex("#FFE8CC"),
+        ContentBg     = Color3.fromHex("#0D0500"),
+        ElementBg     = Color3.fromHex("#1A0A00"),
+        ElementBorder = Color3.fromHex("#442200"),
+        AccentOff     = Color3.fromHex("#442200"),
+        TextPrimary   = Color3.fromHex("#FFF0E0"),
+        TextSecondary = Color3.fromHex("#CC9966"),
+        TextDisabled  = Color3.fromHex("#664422"),
+        SliderTrack   = Color3.fromHex("#442200"),
+        SliderKnob    = Color3.fromHex("#FFF0E0"),
+        DropdownBg    = Color3.fromHex("#1A0A00"),
+        DropdownItem  = Color3.fromHex("#0D0500"),
+        DropdownHover = Color3.fromHex("#331800"),
+        InputBg       = Color3.fromHex("#110700"),
+        TooltipBg     = Color3.fromHex("#080300"),
+        NotifBg       = Color3.fromHex("#1A0A00"),
+        ScrollBar     = Color3.fromHex("#281200"),
+        TitleText     = Color3.fromHex("#FFF0E0"),
+        CloseBtn      = Color3.fromHex("#CC2200"),
+        MinimizeBtn   = Color3.fromHex("#553300"),
+        SectionHeader = Color3.fromHex("#281200"),
+    },
+    ["Monochrome"] = {
+        accent        = Color3.fromRGB(210, 210, 210),
+        Background    = Color3.fromHex("#080808"),
+        TopBar        = Color3.fromHex("#111111"),
+        LeftBar       = Color3.fromHex("#161616"),
+        CategoryHover = Color3.fromHex("#222222"),
+        CategoryText  = Color3.fromHex("#DDDDDD"),
+        ContentBg     = Color3.fromHex("#080808"),
+        ElementBg     = Color3.fromHex("#111111"),
+        ElementBorder = Color3.fromHex("#2A2A2A"),
+        AccentOff     = Color3.fromHex("#2A2A2A"),
+        TextPrimary   = Color3.fromHex("#EEEEEE"),
+        TextSecondary = Color3.fromHex("#999999"),
+        TextDisabled  = Color3.fromHex("#444444"),
+        SliderTrack   = Color3.fromHex("#2A2A2A"),
+        SliderKnob    = Color3.fromHex("#EEEEEE"),
+        DropdownBg    = Color3.fromHex("#111111"),
+        DropdownItem  = Color3.fromHex("#080808"),
+        DropdownHover = Color3.fromHex("#222222"),
+        InputBg       = Color3.fromHex("#0C0C0C"),
+        TooltipBg     = Color3.fromHex("#050505"),
+        NotifBg       = Color3.fromHex("#111111"),
+        ScrollBar     = Color3.fromHex("#1A1A1A"),
+        TitleText     = Color3.fromHex("#EEEEEE"),
+        CloseBtn      = Color3.fromHex("#555555"),
+        MinimizeBtn   = Color3.fromHex("#333333"),
+        SectionHeader = Color3.fromHex("#1A1A1A"),
+    },
+}
+
+-- ─────────────────────────────────────────────────────────────
 -- ADD CONFIG PRESET
 -- ─────────────────────────────────────────────────────────────
 -- Creates a self-contained "Config" category on the window that
@@ -1720,15 +1867,20 @@ end
 -- named custom theme save/load — all auto-saved on every change and
 -- auto-loaded on call (before UiLib.Run).
 --
--- Usage (ExampleUsage side):
---   Window.AddConfigPreset({ toggleKeybind = kbToggle })
+-- ALL options are optional. Minimal usage:
+--   Window.AddConfigPreset({})
+--   Window.AddConfigPreset()
 --
--- Options:
---   toggleKeybind   handle   keybind widget whose .Key is persisted
---   configPath      string   override default save path (optional)
---   themesDir       string   override default themes folder (optional)
+-- Options (all optional):
+--   toggleKeybind   handle   external keybind widget whose .Key is kept in sync.
+--                            When nil, the Config category's own keybind widget
+--                            drives window show/hide automatically via an internal
+--                            polling thread — no external setup needed.
+--   configPath      string   override default save path (default: "MatchaUI/Config.json")
+--   themesDir       string   override default themes folder (default: "MatchaUI/Themes")
 --   presets         table    built-in preset table { [name]={accent,keys...} }
---                            if nil, uses the Theme defaults only
+--                            when nil, the 5 built-in MatchaUI presets are used:
+--                            "Default (Lime)", "Crimson", "Ocean", "Sunset", "Monochrome"
 --
 -- The category is created, populated, and the saved config is applied
 -- before this function returns.  Call it before UiLib.Run().
@@ -1736,8 +1888,8 @@ function MatchaUI.AddConfigPreset(win, opts)
     opts = opts or {}
     local CONFIG_PATH = opts.configPath or "MatchaUI/Config.json"
     local THEMES_DIR  = opts.themesDir  or "MatchaUI/Themes"
-    local kbHandle    = opts.toggleKeybind   -- may be nil
-    local builtinPresets = opts.presets or {}
+    local kbHandle    = opts.toggleKeybind   -- may be nil; internal kbWidget used instead
+    local builtinPresets = opts.presets or DEFAULT_PRESETS
 
     -- ── Helpers ───────────────────────────────────────────────
     local function c3hex(c)
@@ -1766,7 +1918,7 @@ function MatchaUI.AddConfigPreset(win, opts)
         ToggleKeybindVK = kbHandle and kbHandle.Key or 0x2D,
         AccentHex       = "#39FF14",
         Font            = "Monospace",
-        ThemePreset     = "Default",
+        ThemePreset     = "Default (Lime)",
         -- ThemeColors: persisted per-key hex strings, written on every SetThemeColor call
         -- from the Theme Key picker. On startup these override the preset's colors.
         ThemeColors     = {},
@@ -2122,6 +2274,31 @@ function MatchaUI.AddConfigPreset(win, opts)
     -- Ensure ThemeColors sub-table is always present (old config files may lack it)
     if type(_cfg.ThemeColors) ~= "table" then _cfg.ThemeColors = {} end
     applyConfig(_cfg)
+
+    -- ── Internal toggle polling (only when no external handle was supplied) ──
+    -- When the caller does not pass toggleKeybind, the Config-category keybind
+    -- widget (kbWidget) IS the toggle.  A background thread polls it and
+    -- shows/hides the window — identical to what ExampleUsage does externally.
+    if not opts.toggleKeybind then
+        spawn(function()
+            local lastDown = false
+            while true do
+                wait(0.05)
+                if isrbxactive() and kbWidget then
+                    local down = iskeypressed(kbWidget.Key)
+                    if down and not lastDown then
+                        win.SetVisible(not win.Visible)
+                        MatchaUI.Notify(
+                            win.Visible and "UI Shown" or "UI Hidden",
+                            "Bound to VK " .. tostring(kbWidget.Key),
+                            2
+                        )
+                    end
+                    lastDown = down
+                end
+            end
+        end)
+    end
 
     return cat
 end
