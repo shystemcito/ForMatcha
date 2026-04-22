@@ -203,7 +203,7 @@ local function findNearestNPC(filterNames)
 	local bestDist = math.huge
 
 	for _, npc in cons.NPCPath:GetChildren() do
-		if npc.ClassName == "Model" and npc:FindFirstChild("HumanoidRootPart") then
+		if npc.ClassName == "Model" and npc:FindFirstChild("HumanoidRootPart") and npc.Name ~= "TrainingDummy" then
 			local humanoid = getHumanoid(npc)
 			if humanoid and humanoid.Health > 0 then
 				local nameFormatted = npc.Name:gsub("%s*%d+$", "")
