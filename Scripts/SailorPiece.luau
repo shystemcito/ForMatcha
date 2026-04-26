@@ -26,15 +26,16 @@ local keyMap = {
 local cons = {
 	Workspace = game:GetService("Workspace"),
 	Players = game:GetService("Players"),
-	RunService = game:GetService("RunService"),
-	Seas = {
-		Sea1 = 77747658251236,
-		Sea2 = 00000000000001, -- not support for now
+	RunService = game:GetService("RunService"), -- Someday I will use you... maybe
+	Places = {
+		Sea1 = 77747658251236, -- PlaceId
+		Sea2 = 130167267952199, -- PlaceId
 	},
 }
 cons.Player = cons.Players.LocalPlayer
 cons.PlayerGui = cons.Player:WaitForChild("PlayerGui")
 cons.NPCPath = cons.Workspace:WaitForChild("NPCs")
+cons.CurrentPlace = game.PlaceId
 
 local farmCfg = {
 	Tools = {},
@@ -42,56 +43,178 @@ local farmCfg = {
 	CachedToolNumber = nil,
 
 	AutofarmMethod = "Nearest",
-	AttackPosition = "Upward",
-	SelectedQuest = "",
-	NPCKillNumber = nil,
+	AttackPosition = "Bottom",
+	SelectedQuest = "None",
 	SelectedNPCs = {},
 	SelectedAttacks = {},
 
 	ExistingNPCs = {},
 	NPCDistance = 10,
-	TweenSpeed = 120,
+	TweenSpeed = 150,
 	SafeTween = false,
+	isTweening = false,
 
 	CurrentSpawnpointAddress = nil,
 
 	QuestMap = {
-		Quest1 = {"QuestNPC1", Vector3.new(171, 16, -214), "Thief", {0,99}},
-		Quest2 = {"QuestNPC2", Vector3.new(-7, -2.5, -202), "ThiefBoss", {100,249}},
-		Quest3 = {"QuestNPC3", Vector3.new(-519, -1.6, 434), "Monkey", {250,499}},
-		Quest4 = {"QuestNPC4", Vector3.new(-467, 18.8, 480), "MonkeyBoss", {500,749}},
-		Quest5 = {"QuestNPC5", Vector3.new(-688, -2.4, -460), "DesertBandit", {750,999}},
-		Quest6 = {"QuestNPC6", Vector3.new(-863, -4.2, -385.5), "DesertBoss", {1000,1499}},
-		Quest7 = {"QuestNPC7", Vector3.new(-388.6, -1.7, -945), "FrostRogue", {1500,1999}},
-		Quest8 = {"QuestNPC8", Vector3.new(-550.7, 22.4, -1025.7), "SnowBoss", {2000,2999}},
-		Quest9 = {"QuestNPC9", Vector3.new(1419, 9, 372), "Sorcerer", {3000,3999}},
-		Quest10 = {"QuestNPC10", Vector3.new(1604, 9, 429), "PandaMiniBoss", {4000,5000}},
-		Quest11 = {"QuestNPC11", Vector3.new(-285.6, -3.3, 1038.7), "Hollow", {5000,6250}},
-		Quest12 = {"QuestNPC12", Vector3.new(626.4, 1.8, -1609.5), "StrongSorcerer", {6250,7000}},
-		Quest13 = {"QuestNPC13", Vector3.new(-19.7, 1.9, -1985.2), "Curse", {7000,8000}},
-		Quest14 = {"QuestNPC14", Vector3.new(-1187.4, 17.9, 338.5), "Slime", {8000,9000}},
-		Quest15 = {"QuestNPC15", Vector3.new(1028, 1.4, 1241), "AcademyTeacher", {9000,10000}},
-		Quest16 = {"QuestNPC16", Vector3.new(-1165, 2.5, -1189.8), "Swordsman", {10000,10750}},
-		Quest17 = {"QuestNPC17", Vector3.new(-1408, 1603, 1642.2), "Quincy", {10750,11500}},
-		Quest18 = {"QuestNPC18", Vector3.new(-1786.6, 7, -744.6), "Ninja", {11500,12000}},
-		Quest19 = {"QuestNPC19", Vector3.new(67, -1.1, 1758.8), "ArenaFighter", {12000,12750}},
+		None = {},
+		Sea1 = {
+			Quest1 = {"QuestNPC1", Vector3.new(171, 16, -214), "Thief", {0,99}},
+			Quest2 = {"QuestNPC2", Vector3.new(-7, -2.5, -202), "ThiefBoss", {100,249}},
+			Quest3 = {"QuestNPC3", Vector3.new(-519, -1.6, 434), "Monkey", {250,499}},
+			Quest4 = {"QuestNPC4", Vector3.new(-467, 18.8, 480), "MonkeyBoss", {500,749}},
+			Quest5 = {"QuestNPC5", Vector3.new(-688, -2.4, -460), "DesertBandit", {750,999}},
+			Quest6 = {"QuestNPC6", Vector3.new(-863, -4.2, -385.5), "DesertBoss", {1000,1499}},
+			Quest7 = {"QuestNPC7", Vector3.new(-388.6, -1.7, -945), "FrostRogue", {1500,1999}},
+			Quest8 = {"QuestNPC8", Vector3.new(-550.7, 22.4, -1025.7), "SnowBoss", {2000,2999}},
+			Quest9 = {"QuestNPC9", Vector3.new(1419, 9, 372), "Sorcerer", {3000,3999}},
+			Quest10 = {"QuestNPC10", Vector3.new(1604, 9, 429), "PandaMiniBoss", {4000,5000}},
+			Quest11 = {"QuestNPC11", Vector3.new(-285.6, -3.3, 1038.7), "Hollow", {5000,6250}},
+			Quest12 = {"QuestNPC12", Vector3.new(626.4, 1.8, -1609.5), "StrongSorcerer", {6250,7000}},
+			Quest13 = {"QuestNPC13", Vector3.new(-19.7, 1.9, -1985.2), "Curse", {7000,8000}},
+			Quest14 = {"QuestNPC14", Vector3.new(-1187.4, 17.9, 338.5), "Slime", {8000,9000}},
+			Quest15 = {"QuestNPC15", Vector3.new(1028, 1.4, 1241), "AcademyTeacher", {9000,10000}},
+			Quest16 = {"QuestNPC16", Vector3.new(-1165, 2.5, -1189.8), "Swordsman", {10000,10750}},
+			Quest17 = {"QuestNPC17", Vector3.new(-1408, 1603, 1642.2), "Quincy", {10750,11500}},
+			Quest18 = {"QuestNPC18", Vector3.new(-1786.6, 7, -744.6), "Ninja", {11500,12000}},
+			Quest19 = {"QuestNPC19", Vector3.new(67, -1.1, 1758.8), "ArenaFighter", {12000,12750}},
+		},
+		Sea2 = {
+			Quest20 = {"QuestNPC20", Vector3.new(-351.78, -3.65, -189.18), "Delinquent", {12750, 13000}},
+			Quest21 = {"QuestNPC21", Vector3.new(-204.35, 22.26, -375.94), "StrongFighter", {13000, 13500}},
+			Quest22 = {"QuestNPC22", Vector3.new(-3091.72, 8.44, -586.49), "StrongBandit", {13500, 14500}},
+			Quest23 = {"QuestNPC23", Vector3.new(-1644.26, 3.68, 1718.2), "FastNinja", {14500, 99999}},
+		}
 	},
 	QuestsNames = {},
+
+	QuestPieces = {
+		None = {},
+		Sea1 = {
+			SlimePieces = {
+				Piece1 = {"Slime Piece #1", Vector3.new(-852.5076, 2, -317.2415)},
+				Piece2 = {"Slime Piece #2", Vector3.new(-435.9127, 24, -1188.6091)},
+				Piece3 = {"Slime Piece #3", Vector3.new(66.1644, 36, -144.8689)},
+				Piece4 = {"Slime Piece #4", Vector3.new(-581.1964, 58, 316.1762)},
+				Piece5 = {"Slime Piece #5", Vector3.new(1749.9921, 9, 496.5012)},
+				Piece6 = {"Slime Piece #6", Vector3.new(-431.0014, 23, 1401.0228)},
+				Piece7 = {"Slime Piece #7", Vector3.new(790.4694, 70, -2309.6760)},
+			},
+			DungeonPieces = {
+				Piece1 = {"Ancient Piece #1", Vector3.new(86.1230, 10.0369, -134.0189)},
+				Piece2 = {"Ancient Piece #2", Vector3.new(-391.6785, 0.6315, 508.6844)},
+				Piece3 = {"Ancient Piece #3", Vector3.new(-1058.0981, 6.3670, -306.4064)},
+				Piece4 = {"Ancient Piece #4", Vector3.new(-314.2175, -1.1388, -1190.7639)},
+				Piece5 = {"Ancient Piece #5", Vector3.new(1712.8916, 139.9440, -29.3113)},
+				Piece6 = {"Ancient Piece #6", Vector3.new(-686.2745, 99.6920, 1338.5193)},
+			},
+			HogyokuFragments = {
+				Piece1 = {"Fragment #1", Vector3.new(-424, 60, -1235)},
+				Piece2 = {"Fragment #2", Vector3.new(1636, 87, 247)},
+				Piece3 = {"Fragment #3", Vector3.new(-636, 27, 1206)},
+				Piece4 = {"Fragment #4", Vector3.new(648, 140, -2069)},
+				Piece5 = {"Fragment #5", Vector3.new(-1206, 33, 463)},
+				Piece6 = {"Fragment #6", Vector3.new(-906, 18, -1260)},
+			},
+			FragmentPieces = {
+				Piece1 = {'Spot1', Vector3.new(57, 5, -358)},
+				Piece2 = {'Spot2', Vector3.new(265, 105, -292)},
+				Piece3 = {'Spot3', Vector3.new(-672, 35, -522)},
+				Piece4 = {'Spot4', Vector3.new(-782, 15, -296)},
+				Piece5 = {'Spot5', Vector3.new(-495, 5, -1104)},
+				Piece6 = {'Spot6', Vector3.new(1819, 145, -85)},
+				Piece7 = {'Spot7', Vector3.new(1410, 190, 579)},
+				Piece8 = {'Spot8', Vector3.new(-601, 5, 954)},
+				Piece9 = {'Spot9', Vector3.new(-826, 55, 1178)},
+				Piece10 = {'Spot10', Vector3.new(627, 75, -2379)},
+				Piece11 = {'Spot11', Vector3.new(587, 210, -2135)},
+				Piece12 = {'Spot12', Vector3.new(-1108, 15, 146)},
+				Piece13 = {'Spot13', Vector3.new(-1430, 5, 397)},
+				Piece14 = {'Spot14', Vector3.new(881, 40, 1286)},
+				Piece15 = {'Spot15', Vector3.new(1057, 100, 1481)},
+				Piece16 = {'Spot16', Vector3.new(-936, 95, -1218)},
+				Piece17 = {'Spot17', Vector3.new(-1573, 40, -1418)},
+				Piece18 = {'Spot18', Vector3.new(-1744, 85, -749)},
+				Piece19 = {'Spot19', Vector3.new(20, 0, 2079.8999)},
+				Piece20 = {'Spot20', Vector3.new(-56, 10, 1826.6602)},
+			},
+			TimedEasterEggs = {
+				Piece1 = {"Timed Spot 1", Vector3.new(264, 100, -290)},
+				Piece2 = {"Timed Spot 2", Vector3.new(-725, 80, -318)},
+				Piece3 = {"Timed Spot 3", Vector3.new(-496, 3, -1136)},
+				Piece4 = {"Timed Spot 4", Vector3.new(1827, 53, 200)},
+				Piece5 = {"Timed Spot 5", Vector3.new(502, 18, -2435)},
+				Piece6 = {"Timed Spot 6", Vector3.new(-1402, 60, -1697)},
+				Piece7 = {"Timed Spot 7", Vector3.new(1162, 23, 1489)},
+				Piece8 = {"Timed Spot 8", Vector3.new(-7, 0, 1796)},
+			},
+			HiddenEasterEggs = {
+				Piece1 = {"Hidden Spot 1", Vector3.new(-415, 30, 457)},
+				Piece2 = {"Hidden Spot 2", Vector3.new(-279, 55, -1264)},
+				Piece3 = {"Hidden Spot 3", Vector3.new(290, 143, 956)},
+			},
+			BossEasterEggs = {
+				Piece1 = {"Boss Spot 1", Vector3.new(13, 7, -108)},
+				Piece2 = {"Boss Spot 2", Vector3.new(-210, 12, -1099)},
+				Piece3 = {"Boss Spot 3", Vector3.new(-982, 7, -667)},
+				Piece4 = {"Boss Spot 4", Vector3.new(605, 2, -1847)},
+				Piece5 = {"Boss Spot 5", Vector3.new(1516, 30, -90)},
+				Piece6 = {"Boss Spot 6", Vector3.new(414, 26, 973)},
+				Piece7 = {"Boss Spot 7", Vector3.new(-1365, 18, 40)},
+				Piece8 = {"Boss Spot 8", Vector3.new(-1382, 26, -1093)},
+			},
+		},
+		Sea2 = {},
+	},
+
 	BossesMap = {
-		-- Timed bosses
-		Boss1 = {"JinwooBoss", Vector3.new(250, 50, 930)},
-		Boss2 = {"AlucardBoss", Vector3.new(250, 50, 930)},
-		Boss3 = {"GojoBoss", Vector3.new(1858, 50, 338.14)},
-		Boss4 = {"YujiBoss", Vector3.new(1537, 50, 226.11)},
-		Boss5 = {"SukunaBoss", Vector3.new(1571, 150, -34)},
-		Boss6 = {"AizenBoss", Vector3.new(-567, 50, 1228)},
-		Boss7 = {"StrongestShinobiBoss", Vector3.new(-2110.6, 50, -595)},
-		Boss8 = {"YamatoBoss", Vector3.new(-1422, 50, -1383)},
+		None = {},
+		Sea1 = {
+			-- Timed (Normal bosses)
+			Boss1 = {"JinwooBoss", Vector3.new(250, 50, 930)},
+			Boss2 = {"AlucardBoss", Vector3.new(250, 50, 930)},
+			Boss3 = {"GojoBoss", Vector3.new(1858, 50, 338.14)},
+			Boss4 = {"YujiBoss", Vector3.new(1537, 50, 226.11)},
+			Boss5 = {"SukunaBoss", Vector3.new(1571, 150, -34)},
+			Boss6 = {"AizenBoss", Vector3.new(-567, 50, 1228)},
+			Boss7 = {"StrongestShinobiBoss", Vector3.new(-2110.6, 50, -595)},
+			Boss8 = {"YamatoBoss", Vector3.new(-1422, 50, -1383)},
+			-- Spawned by players
+			Boss9 = {"SaberBoss", Vector3.new(776, 50, -1091)},
+			Boss10 = {"QinShiBoss", Vector3.new(776, 50, -1091)},
+			Boss11 = {"IchigoBoss", Vector3.new(776, 50, -1091)},
+			Boss12 = {"GilgameshBoss", Vector3.new(776, 50, -1091)},
+			Boss13 = {"BlessedMaidenBoss", Vector3.new(776, 50, -1091)},
+			Boss14 = {"SaberAlterBoss", Vector3.new(776, 50, -1091)},
+			Boss15 = {"MoonSlayerBoss", Vector3.new(776, 50, -1091)},
+			Boss16 = {"IceQueenBoss", Vector3.new(776, 50, -1091)},
+			Boss17 = {"AtomicBoss_Normal", Vector3.new(56, 50, 1966)},
+			Boss18 = {"RimuruBoss_Normal", Vector3.new(-1363, 50, 221)},
+			Boss19 = {"GreatMageBoss_Normal", Vector3.new(2481, 50, 2053)},
+			Boss20 = {"StrongestofTodayBoss_Normal", Vector3.new(136, 50, -2431)},
+			Boss21 = {"StrongestinHistoryBoss_Normal", Vector3.new(611, 50, -2315)},
+		},
+		Sea2 = {
+			Boss1 = {"CosmicBeingBoss_Normal", Vector3.new(-1825, 50, 1943)}, -- Idk more bosses in sea 2,
+			-- Reminder: Add spawn bosses later
+		},
 	},
 	bossNames = {},
 	ExcludedBosses = {},
 };
-for questKey in farmCfg.QuestMap do table.insert(farmCfg.QuestsNames, questKey) end
+local currentSea = "None"
+for seaName, placeId in cons.Places do
+	if cons.CurrentPlace == placeId then
+		currentSea = seaName
+		break
+	end
+end
+
+if farmCfg.QuestMap[currentSea] then
+	for questKey in farmCfg.QuestMap[currentSea] do 
+		table.insert(farmCfg.QuestsNames, questKey) 
+	end
+end
 
 table.sort(farmCfg.QuestsNames, function(a, b)
 	local numA = tonumber(string.match(a, "%d+")) or 0
@@ -99,8 +222,17 @@ table.sort(farmCfg.QuestsNames, function(a, b)
 	return numA < numB
 end)
 
-for _, data in farmCfg.BossesMap do table.insert(farmCfg.bossNames, data[1]) end
-table.sort(farmCfg.bossNames)
+table.clear(farmCfg.bossNames)
+if farmCfg.BossesMap[currentSea] then
+	for _, data in farmCfg.BossesMap[currentSea] do 
+		local cleanName = string.split(data[1], "_")[1]
+		
+		if not table.find(farmCfg.bossNames, cleanName) then
+			table.insert(farmCfg.bossNames, cleanName) 
+		end
+	end
+	table.sort(farmCfg.bossNames)
+end
 
 local farmToggles = {
 	attacking = false,
@@ -111,7 +243,7 @@ local farmToggles = {
 
 -- == Helpers ==========================================
 local function getRoot(Model)
-	if not Model.ClassName == "Model" then return "Class missmatch" end
+	if Model.ClassName ~= "Model" then return nil end
 	local Root = Model:FindFirstChild("HumanoidRootPart")
 		or Model.PrimaryPart
 		or Model:FindFirstChild("Torso")
@@ -294,11 +426,12 @@ local function findNearestBoss(filterNamesExclusion)
 
 	local function isExcluded(npcName)
 		if not filterNamesExclusion then return false end
-		return table.find(filterNamesExclusion, npcName) ~= nil
+		local cleanName = string.split(npcName, "_")[1]
+		return table.find(filterNamesExclusion, cleanName) ~= nil
 	end
 
 	for _, npc in cons.NPCPath:GetChildren() do
-		if npc.ClassName == "Model" and (npc:GetAttribute("_IsTimedBoss") or npc:GetAttribute("_IsStrongestBoss")) then
+		if npc.ClassName == "Model" and (npc:GetAttribute("_IsTimedBoss")) then
 			if not isExcluded(npc.Name) then
 				local humanoid = getHumanoid(npc)
 				if humanoid and humanoid.Health > 0 then
@@ -317,23 +450,40 @@ local function findNearestBoss(filterNamesExclusion)
 	end	
 
 	if not nearestBoss then
-		for _, bossData in farmCfg.BossesMap do
-			local exactName = bossData[1]
-			local spawnPos = bossData[2]
+		if farmCfg.BossesMap[currentSea] then
+			local difficulties = {"_Normal", "_Medium", "_Hard", "_Extreme"}
 
-			if not isExcluded(exactName) then
-				local npc = cons.NPCPath:FindFirstChild(exactName)
-				if npc and npc.ClassName == "Model" then
-					local humanoid = getHumanoid(npc)
-					if humanoid and humanoid.Health > 0 then
-						local npcRoot = getRoot(npc)
-						local targetPos = npcRoot and (npcRoot.Position + Vector3.new(0, 20, 0)) or spawnPos
-						
-						local dist = (targetPos - root.Position).Magnitude
-						if dist < bestDist then
-							bestDist = dist
-							nearestBoss = npc
-							nearestPos = targetPos
+			for _, bossData in farmCfg.BossesMap[currentSea] do
+				local cleanDataName = string.split(bossData[1], "_")[1]
+				local spawnPos = bossData[2]
+
+				if not isExcluded(cleanDataName) then
+					local npc = nil
+					local possibleNames = {cleanDataName}
+					for _, diff in difficulties do
+						table.insert(possibleNames, cleanDataName .. diff)
+					end
+
+					for _, exactName in possibleNames do
+						local child = cons.NPCPath:FindFirstChild(exactName)
+						if child and child.ClassName == "Model" then
+							npc = child
+							break 
+						end
+					end
+
+					if npc then
+						local humanoid = getHumanoid(npc)
+						if humanoid and humanoid.Health > 0 then
+							local npcRoot = getRoot(npc)
+							local targetPos = npcRoot and (npcRoot.Position + Vector3.new(0, 20, 0)) or spawnPos
+							
+							local dist = (targetPos - root.Position).Magnitude
+							if dist < bestDist then
+								bestDist = dist
+								nearestBoss = npc
+								nearestPos = targetPos
+							end
 						end
 					end
 				end
@@ -346,14 +496,19 @@ end
 
 -- == Farm Utilities ==========================================
 local tweenToken = 0
-local function TweenTo(targetPos, lift)
+local function TweenTo(targetPos, lift, targetInstance, isManual) 
 	tweenToken += 1
 	local myToken = tweenToken
 
 	local character = cons.Player.Character
 	if not character then return end
 	local root = getRoot(character)
-	if not root then return end
+	local humanoid = getHumanoid(character)
+	
+	if not root or not humanoid or humanoid.Health <= 0 then return end
+	if not isManual and not farmToggles.farming then return end 
+
+	farmToggles.isTweening = true
 
 	local startPos = root.Position
 	local distance = (targetPos - startPos).Magnitude
@@ -366,9 +521,28 @@ local function TweenTo(targetPos, lift)
 		if tweenToken ~= myToken then return end
 
 		character = cons.Player.Character
-		if not character then break end
 		root = getRoot(character)
-		if not root then break end
+		humanoid = getHumanoid(character)
+		
+		if not isManual and not farmToggles.farming then
+			if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+			if tweenToken == myToken then farmToggles.isTweening = false end
+			return
+		end
+
+		if not character or not root or not humanoid or humanoid.Health <= 0 then 
+			if tweenToken == myToken then farmToggles.isTweening = false end
+			return
+		end
+		
+		if targetInstance then
+			local targetHum = getHumanoid(targetInstance)
+			if not targetInstance.Parent or not targetHum or targetHum.Health <= 0 then
+				if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+				if tweenToken == myToken then farmToggles.isTweening = false end
+				return 
+			end
+		end
 
 		local alpha = i / steps
 		local newPos = startPos:Lerp(targetPos, alpha)
@@ -394,13 +568,21 @@ local function TweenTo(targetPos, lift)
 		task.wait(stepTime)
 	end
 
-	if root and tweenToken == myToken then
-		for i = 1, 10 do
-			if tweenToken ~= myToken then return end
-			root.Position = targetPos
-			root.Velocity = Vector3.new(0, 0, 0)
-			task.wait()
+	if tweenToken == myToken then
+		character = cons.Player.Character
+		root = getRoot(character)
+		humanoid = getHumanoid(character)
+		
+		if root and humanoid and humanoid.Health > 0 and (isManual or farmToggles.farming) then
+			for i = 1, 10 do
+				if tweenToken ~= myToken then return end
+				root.Position = targetPos
+				root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
+				task.wait()
+			end
 		end
+		
+		farmToggles.isTweening = false
 	end
 end
 
@@ -413,12 +595,14 @@ local function selectQuestForLevel()
 	local bestKey = nil
 	local bestMin = -1
 
-	for key, data in farmCfg.QuestMap do
-		local levelRange = data[4]
-		if level >= levelRange[1] and level <= levelRange[2] then
-			if levelRange[1] > bestMin then
-				bestMin = levelRange[1]
-				bestKey = key
+	if farmCfg.QuestMap[currentSea] then
+		for key, data in farmCfg.QuestMap[currentSea] do
+			local levelRange = data[4]
+			if level >= levelRange[1] and level <= levelRange[2] then
+				if levelRange[1] > bestMin then
+					bestMin = levelRange[1]
+					bestKey = key
+				end
 			end
 		end
 	end
@@ -588,14 +772,14 @@ local function runFarmNearest(filtered)
 			continue
 		end
 
-		TweenTo(targetPos + Vector3.new(0, 50, 0), true)
+		TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetNPC)
 		if not farmToggles.farming then break end
 
 		local spawnChanged = handleSpawnpoint()
 		if not farmToggles.farming then break end
 
 		if spawnChanged then
-			TweenTo(targetPos + Vector3.new(0, 50, 0), true)
+			TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetNPC)
 		end
 		if not farmToggles.farming then break end
 
@@ -616,12 +800,12 @@ local function runFarmQuest(autoLevel)
 		end
 
 		if targetBoss and targetPos then
-			TweenTo(targetPos + Vector3.new(0, 50, 0), true)
+			TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetBoss)
 			if not farmToggles.farming then break end
 
 			local spawnChanged = handleSpawnpoint()
 			if spawnChanged then
-				TweenTo(targetPos + Vector3.new(0, 50, 0), true)
+				TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetBoss)
 			end
 
 			local bossRoot = getRoot(targetBoss)
@@ -636,12 +820,12 @@ local function runFarmQuest(autoLevel)
 
 		local questKey = autoLevel and selectQuestForLevel() or farmCfg.SelectedQuest
 
-		if not questKey or not farmCfg.QuestMap[questKey] then
+		if not questKey or not farmCfg.QuestMap[currentSea] or not farmCfg.QuestMap[currentSea][questKey] then
 			task.wait(1)
 			continue
 		end
 
-		local questData = farmCfg.QuestMap[questKey]
+		local questData = farmCfg.QuestMap[currentSea][questKey]
 		local questPos = questData[2]
 		local enemyName = questData[3]
 
@@ -679,7 +863,7 @@ local function runFarmQuest(autoLevel)
 
 		local npcRoot = getRoot(npc)
 		if npcRoot then
-			TweenTo(npcRoot.Position + Vector3.new(0, 50, 0), true)
+			TweenTo(npcRoot.Position + Vector3.new(0, 50, 0), true, npc)
 		end
 		if not farmToggles.farming then break end
 
@@ -833,7 +1017,7 @@ Window.AddTooltip(farmMethodDd, "Select the auto farm method")
 local selectQuestDd = Window.AddDropdown(catFarm, "Quest (for Quest method)", farmCfg.QuestsNames, "None", function(sel)
 	task.spawn(function()
 		farmCfg.SelectedQuest = sel
-		--TweenTo(farmCfg.QuestMap[sel][2], true)
+		--TweenTo(farmCfg.QuestMap[currentSea][sel][2], true)
 	end)
 end)
 
@@ -849,7 +1033,9 @@ Window.AddToggle(catFarm, "Attack", farmToggles.attacking, function(state)
 	task.spawn(function()
 		farmToggles.attacking = state
 		while farmToggles.attacking do
-			attack()
+			if not farmToggles.isTweening then
+				attack()
+			end
 			task.wait(0.15)
 		end
 	end)
@@ -899,6 +1085,46 @@ local excludeBossDd = Window.AddDropdown(catFarm, "Exclude / Include Boss", farm
 	end)
 end)
 Window.AddTooltip(excludeBossDd, "Select bosses you want to ignore")
+
+-- == Quests Category ==========================================
+local catQuests = Window.AddCategory("Quests")
+
+local hasQuestPieces = false
+if farmCfg.QuestPieces[currentSea] and next(farmCfg.QuestPieces[currentSea]) then
+	hasQuestPieces = true
+end
+
+if hasQuestPieces then
+	for groupName, piecesList in farmCfg.QuestPieces[currentSea] do
+		Window.AddSection(catQuests, groupName)
+		
+		local pieceNames = {}
+		local pieceDataMap = {}
+		
+		for key, data in piecesList do
+			table.insert(pieceNames, data[1])
+			pieceDataMap[data[1]] = data[2]
+		end
+		
+		table.sort(pieceNames, function(a, b)
+			local numA = tonumber(string.match(a, "%d+")) or 0
+			local numB = tonumber(string.match(b, "%d+")) or 0
+			return numA < numB
+		end)
+		
+		table.insert(pieceNames, 1, "None")
+		
+		Window.AddDropdown(catQuests, "Go to " .. groupName, pieceNames, "None", function(sel)
+			task.spawn(function()
+				if sel ~= "None" and pieceDataMap[sel] then
+					TweenTo(pieceDataMap[sel], true, nil, true) 
+				end
+			end)
+		end)
+	end
+else
+	Window.AddSection(catQuests, "No quest pieces available in this sea")
+end
 
 Window.AddConfigPreset({})
 UiLib.Run()
