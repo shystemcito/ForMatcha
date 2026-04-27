@@ -36,14 +36,16 @@ cons.Player = cons.Players.LocalPlayer
 cons.PlayerGui = cons.Player:WaitForChild("PlayerGui")
 cons.NPCPath = cons.Workspace:WaitForChild("NPCs")
 cons.CurrentPlace = game.PlaceId
+cons.Mouse = cons.Player:GetMouse()
 
 local farmCfg = {
 	Tools = {},
 	SelectedTool = "None",
 	CachedToolNumber = nil,
+	ScreenScale = 1,
 
 	AutofarmMethod = "Nearest",
-	AttackPosition = "Bottom",
+	AttackPosition = "Backward",
 	SelectedQuest = "None",
 	SelectedNPCs = {},
 	SelectedAttacks = {},
@@ -238,10 +240,111 @@ local farmToggles = {
 	attacking = false,
 	farming = false,
 	equipTools = false,
-	bossPrioritize = false
+	bossPrioritize = false,
+	AntiAfk = false,
+	UseSpawnpoints = true,
+	AutoCancelQuests = false,
+}
+
+local tokens = {
+	tweenToken = 0,
+	antiAfkToggle = 0,
+	attackToggle = 0,
+	autoEquipToolToggle = 0,
+	autoCancelQuestsToggle = 0,
+	autoFarmToggle = 0,
 }
 
 -- == Helpers ==========================================
+local function getScreenScale()
+	mousemoveabs(0, 0)
+	task.wait(0.01)
+	
+	local startLogX = cons.Mouse.X
+	local testDistance = 100
+	for i = 1, 10 do
+		mousemoverel(10, 0)
+		task.wait(0.01)
+	end
+	task.wait(0.05)
+	
+	local endLogX = cons.Mouse.X
+	local logicalMoved = math.abs(endLogX - startLogX)
+	
+	if logicalMoved == 0 then return 1 end
+	
+	local rawScale = logicalMoved / testDistance 
+	local snappedScale = math.round(rawScale * 4) / 4
+	local finalScale = math.clamp(snappedScale, 1, 3)
+	
+	for i = 1, 10 do
+		mousemoverel(-10, 0)
+		task.wait(0.01)
+	end
+	
+	return finalScale
+end
+farmCfg.ScreenScale = getScreenScale()
+
+local function walkMouseTo(targetX, targetY, stepSize, tolX, tolY, scale)
+	local failsafe = 0 
+	while true do
+		task.wait(0.01)
+		failsafe = failsafe + 1
+		
+		if failsafe > 150 then 
+			break 
+		end
+		
+		local currentX = cons.Mouse.X
+		local currentY = cons.Mouse.Y
+		
+		local diffX = targetX - currentX
+		local diffY = targetY - currentY
+		
+		if math.abs(diffX) <= tolX and math.abs(diffY) <= tolY then 
+			break 
+		end
+		
+		local distance = math.sqrt((diffX * diffX) + (diffY * diffY))
+		local moveX = (diffX / distance) * stepSize
+		local moveY = (diffY / distance) * stepSize
+		
+		local finalPhysicalMoveX = moveX / scale
+		local finalPhysicalMoveY = moveY / scale
+		
+		mousemoverel(finalPhysicalMoveX, finalPhysicalMoveY)
+	end
+end
+
+local function ClickGui(btn)
+	if isrbxactive() then
+		local startX = cons.Mouse.X
+		local startY = cons.Mouse.Y
+
+		local logicX = btn.AbsolutePosition.X + (btn.AbsoluteSize.X / 2)
+		local logicY = btn.AbsolutePosition.Y + (btn.AbsoluteSize.Y / 2)
+		local viewport = cons.Workspace.CurrentCamera.ViewportSize
+
+		if logicX < 0 or logicY < 0 or logicX > viewport.X or logicY > viewport.Y then
+			return false 
+		end
+
+		local btnTargetX = logicX * farmCfg.ScreenScale
+		local btnTargetY = logicY * farmCfg.ScreenScale
+		
+		local btnTolX = math.max(1, ((btn.AbsoluteSize.X * farmCfg.ScreenScale) / 2) - 5)
+		local btnTolY = math.max(1, ((btn.AbsoluteSize.Y * farmCfg.ScreenScale) / 2) - 5)
+
+		walkMouseTo(btnTargetX, btnTargetY, 15, btnTolX, btnTolY, farmCfg.ScreenScale)
+		mousemoverel(math.random(-2, 2), math.random(-2, 2))
+		task.wait(0.01)
+		mouse1click()
+		task.wait(0.05)
+		walkMouseTo(startX, startY, 15, 10, 10, farmCfg.ScreenScale)
+	end
+end
+
 local function getRoot(Model)
 	if Model.ClassName ~= "Model" then return nil end
 	local Root = Model:FindFirstChild("HumanoidRootPart")
@@ -495,10 +598,9 @@ local function findNearestBoss(filterNamesExclusion)
 end
 
 -- == Farm Utilities ==========================================
-local tweenToken = 0
 local function TweenTo(targetPos, lift, targetInstance, isManual) 
-	tweenToken += 1
-	local myToken = tweenToken
+	tokens.tweenToken += 1
+	local myToken = tokens.tweenToken
 
 	local character = cons.Player.Character
 	if not character then return end
@@ -518,7 +620,7 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 	local stepTime = duration / steps
 
 	for i = 1, steps do
-		if tweenToken ~= myToken then return end
+		if tokens.tweenToken ~= myToken then return end
 
 		character = cons.Player.Character
 		root = getRoot(character)
@@ -526,12 +628,12 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 		
 		if not isManual and not farmToggles.farming then
 			if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
-			if tweenToken == myToken then farmToggles.isTweening = false end
+			if tokens.tweenToken == myToken then farmToggles.isTweening = false end
 			return
 		end
 
 		if not character or not root or not humanoid or humanoid.Health <= 0 then 
-			if tweenToken == myToken then farmToggles.isTweening = false end
+			if tokens.tweenToken == myToken then farmToggles.isTweening = false end
 			return
 		end
 		
@@ -539,7 +641,7 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 			local targetHum = getHumanoid(targetInstance)
 			if not targetInstance.Parent or not targetHum or targetHum.Health <= 0 then
 				if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
-				if tweenToken == myToken then farmToggles.isTweening = false end
+				if tokens.tweenToken == myToken then farmToggles.isTweening = false end
 				return 
 			end
 		end
@@ -568,14 +670,14 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 		task.wait(stepTime)
 	end
 
-	if tweenToken == myToken then
+	if tokens.tweenToken == myToken then
 		character = cons.Player.Character
 		root = getRoot(character)
 		humanoid = getHumanoid(character)
 		
 		if root and humanoid and humanoid.Health > 0 and (isManual or farmToggles.farming) then
 			for i = 1, 10 do
-				if tweenToken ~= myToken then return end
+				if tokens.tweenToken ~= myToken then return end
 				root.Position = targetPos
 				root.AssemblyLinearVelocity = Vector3.new(0, 0, 0)
 				task.wait()
@@ -668,6 +770,8 @@ local function getSpawnpointAddress(spawnpoint)
 end
 
 local function handleSpawnpoint()
+	if not farmToggles.UseSpawnpoints then return false end
+
 	local spawnpoint = getNearestSpawnpoint()
 	if not spawnpoint then return false end
 
@@ -697,7 +801,7 @@ local function handleSpawnpoint()
 end
 
 -- == Farm Utilities ==========================================
-local function attackNPC(npc)
+local function attackNPC(npc, myToken)
 	if not farmToggles.farming then return end
 
 	local npcRoot = getRoot(npc)
@@ -708,6 +812,8 @@ local function attackNPC(npc)
 	local targetPosition = npcRoot.Position
 
 	while farmToggles.farming do
+		if tokens.autoFarmToggle ~= myToken then break end
+		
 		local character = cons.Player.Character
 		if not character then break end
 
@@ -746,8 +852,10 @@ local function attackNPC(npc)
 	end
 end
 
-local function runFarmNearest(filtered)
+local function runFarmNearest(filtered, myToken)
 	while farmToggles.farming do
+		if tokens.autoFarmToggle ~= myToken then break end
+		
 		local targetNPC = nil
 		local targetPos = nil
 		
@@ -773,25 +881,27 @@ local function runFarmNearest(filtered)
 		end
 
 		TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetNPC)
-		if not farmToggles.farming then break end
+		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 		local spawnChanged = handleSpawnpoint()
-		if not farmToggles.farming then break end
+		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 		if spawnChanged then
 			TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetNPC)
 		end
-		if not farmToggles.farming then break end
+		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
-		attackNPC(targetNPC)
+		attackNPC(targetNPC, myToken)
 		task.wait(0.1)
 	end
 end
 
-local function runFarmQuest(autoLevel)
+local function runFarmQuest(autoLevel, myToken)
 	local forceGoToNPC = true 
 
 	while farmToggles.farming do
+		if tokens.autoFarmToggle ~= myToken then break end
+		
 		local targetBoss = nil
 		local targetPos = nil
 		
@@ -801,7 +911,7 @@ local function runFarmQuest(autoLevel)
 
 		if targetBoss and targetPos then
 			TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetBoss)
-			if not farmToggles.farming then break end
+			if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 			local spawnChanged = handleSpawnpoint()
 			if spawnChanged then
@@ -810,7 +920,7 @@ local function runFarmQuest(autoLevel)
 
 			local bossRoot = getRoot(targetBoss)
 			if bossRoot then
-				attackNPC(targetBoss)
+				attackNPC(targetBoss, myToken)
 			end
 			
 			forceGoToNPC = true
@@ -833,14 +943,14 @@ local function runFarmQuest(autoLevel)
 
 		if forceGoToNPC or currentProgress == nil then
 			TweenTo(questPos, true)
-			if not farmToggles.farming then break end
+			if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 			local spawnChanged = handleSpawnpoint()
-			if not farmToggles.farming then break end
+			if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 			if spawnChanged then
 				TweenTo(questPos, true)
-				if not farmToggles.farming then break end
+				if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 			end
 
 			for i = 1, 5 do
@@ -865,11 +975,11 @@ local function runFarmQuest(autoLevel)
 		if npcRoot then
 			TweenTo(npcRoot.Position + Vector3.new(0, 50, 0), true, npc)
 		end
-		if not farmToggles.farming then break end
+		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 		local progressBeforeKill = currentProgress or 0
 
-		attackNPC(npc)
+		attackNPC(npc, myToken)
 
 		local npcHumanoid = getHumanoid(npc)
 		if npcHumanoid and npcHumanoid.Health <= 0 then
@@ -891,25 +1001,27 @@ end
 
 local function startAutoFarm(state)
 	farmToggles.farming = state
-	if not state then return end
-
-	task.spawn(function()
-		while farmToggles.farming do
+	
+	if state then
+		tokens.autoFarmToggle += 1
+		local myToken = tokens.autoFarmToggle
+		
+		task.spawn(function()
 			local method = farmCfg.AutofarmMethod
 
 			if method == "Nearest" then
-				runFarmNearest(false)
+				runFarmNearest(false, myToken)
 			elseif method == "Selected" then
-				runFarmNearest(true)
+				runFarmNearest(true, myToken)
 			elseif method == "Quest" then
-				runFarmQuest(false)
+				runFarmQuest(false, myToken)
 			elseif method == "LevelUp" then
-				runFarmQuest(true)
+				runFarmQuest(true, myToken)
 			end
-
-			task.wait(0.1)
-		end
-	end)
+		end)
+	else
+		tokens.autoFarmToggle += 1
+	end
 end
 
 -- == UI INIT ==========================================
@@ -925,6 +1037,7 @@ local Window = UiLib.CreateWindow({
 -- == Categories ==========================================
 local catSetup = Window.AddCategory("Farm Setup")
 local catFarm = Window.AddCategory("Auto Farm")
+local catQuests = Window.AddCategory("Quests")
 
 -- == Setup Category ==========================================
 -- == Tools section ==========================================
@@ -1001,7 +1114,31 @@ Window.AddTooltip(attackPosDd, "Select attack position | Note: If using Bottom, 
 Window.AddSlider(catSetup, "NPC Distance", 1, 20, farmCfg.NPCDistance, function(val)
 	farmCfg.NPCDistance = math.floor(val)
 end)
-
+-- == Misc section ==================================
+Window.AddSection(catSetup, "Misc")
+local antiAfkTgl = Window.AddToggle(catSetup, "Anti-AFK", farmToggles.AntiAfk, function(state)
+	farmToggles.AntiAfk = state
+	
+	if state then
+		tokens.antiAfkToggle += 1
+		local myToken = tokens.antiAfkToggle
+		
+		task.spawn(function()
+			while farmToggles.AntiAfk do
+				task.wait(600)
+				if tokens.antiAfkToggle ~= myToken or not farmToggles.AntiAfk then break end
+				
+				if not isrbxactive() then continue end
+				mousemoverel(-10, 0)
+				task.wait(0.1)
+				mousemoverel(10, 0)
+			end
+		end)
+	else
+		tokens.antiAfkToggle += 1
+	end
+end)
+Window.AddTooltip(antiAfkTgl, "This will avoid getting you disconnected after 20 minutes (ROBLOX WINDOWS MUST BE ACTIVE)")
 
 -- == Farm Category ==========================================
 -- == FarmConfig Section ==========================================
@@ -1028,32 +1165,57 @@ Window.AddToggle(catFarm, "Auto Farm", farmToggles.farming, function(state)
 		startAutoFarm(state)
 	end)
 end)
+task.spawn(function()
+	while true do
+		task.wait(1200)
+		if farmToggles.farming then
+			startAutoFarm(false)
+			task.wait(1)
+			startAutoFarm(true)
+		end
+	end
+end)
 
 Window.AddToggle(catFarm, "Attack", farmToggles.attacking, function(state)
-	task.spawn(function()
-		farmToggles.attacking = state
-		while farmToggles.attacking do
-			if not farmToggles.isTweening then
-				attack()
+	farmToggles.attacking = state
+	if state then
+		tokens.attackToggle += 1
+		local myToken = tokens.attackToggle
+		task.spawn(function()
+			while farmToggles.attacking do
+				if tokens.attackToggle ~= myToken or not farmToggles.attacking then break end
+				if not farmToggles.isTweening then
+					attack()
+				end
+				task.wait(0.15)
 			end
-			task.wait(0.15)
-		end
-	end)
+		end)
+	else
+		tokens.attackToggle += 1
+	end
 end)
 
 local AutoEquipTgl = Window.AddToggle(catFarm, "Auto equip tools", farmToggles.equipTools, function(state)
-	task.spawn(function()
-		farmToggles.equipTools = state
-		while farmToggles.equipTools do
-			if farmCfg.SelectedTool == "None" then
-				UiLib.Notify("Auto equip tool", "Please select a tool in Setup!", 3)
-				task.wait(5)
-			else
-				equipTool(farmCfg.SelectedTool)
-				task.wait(0.5)
+	farmToggles.equipTools = state
+	if state then
+		tokens.autoEquipToolToggle += 1
+		local myToken = tokens.autoEquipToolToggle
+		task.spawn(function()
+			while farmToggles.equipTools do
+				if tokens.autoEquipToolToggle ~= myToken or not farmToggles.equipTools then break end
+				
+				if farmCfg.SelectedTool == "None" then
+					UiLib.Notify("Auto equip tool", "Please select a tool in Setup!", 3)
+					task.wait(5)
+				else
+					equipTool(farmCfg.SelectedTool)
+					task.wait(0.5)
+				end
 			end
-		end
-	end)
+		end)
+	else
+		tokens.autoEquipToolToggle += 1
+	end
 end)
 Window.AddTooltip(AutoEquipTgl, "Auto-Equip choosen tool in Farm Setup")
 
@@ -1086,9 +1248,52 @@ local excludeBossDd = Window.AddDropdown(catFarm, "Exclude / Include Boss", farm
 end)
 Window.AddTooltip(excludeBossDd, "Select bosses you want to ignore")
 
--- == Quests Category ==========================================
-local catQuests = Window.AddCategory("Quests")
+-- == Extras Section ==========================================
+Window.AddSection(catFarm, "Extras")
+local useSpawnpointsTgl = Window.AddToggle(catFarm, "Use spawnpoints", farmToggles.UseSpawnpoints, function(state)
+	task.spawn(function()
+		farmToggles.UseSpawnpoints = state
+	end)
+end)
+Window.AddTooltip(useSpawnpointsTgl, "Use map spawnpoints while autofarming")
 
+local autoCancelQuestTgl = Window.AddToggle(catFarm, "Auto cancel quest", farmToggles.AutoCancelQuests, function(state)
+	farmToggles.AutoCancelQuests = state
+	if state then
+		tokens.autoCancelQuestsToggle += 1
+		local myToken = tokens.autoCancelQuestsToggle
+		
+		task.spawn(function()
+			while farmToggles.AutoCancelQuests do
+				task.wait(900)
+				if tokens.autoCancelQuestsToggle ~= myToken or not farmToggles.AutoCancelQuests then break end
+				pcall(function()
+					local CloseButton = cons.Player.PlayerGui.QuestUI.Quest.Quest.Holder.Content.Exit.CloseButton
+					ClickGui(CloseButton)
+				end)
+			end
+		end)
+	else
+		tokens.autoCancelQuestsToggle += 1
+	end
+end)
+Window.AddTooltip(autoCancelQuestTgl, "Auto cancel current quest every 15 minutes.")
+
+local scaleLabel = Window.AddValueLabel(catFarm, "Scale Info", "Screen scale: " .. tostring(farmCfg.ScreenScale))
+local recalcScaleBtn = Window.AddButton(catFarm, "Re-Calculate Scale (Fix AutoCancel)", function()
+	task.spawn(function()
+		for i = 3, 1, -1 do
+			scaleLabel:SetValue("Calculating in " .. i .. "s, don't move your mouse...")
+			task.wait(1)
+		end
+		scaleLabel:SetValue("Calculating...")
+		farmCfg.ScreenScale = getScreenScale()
+		scaleLabel:SetValue("Screen scale: " .. tostring(farmCfg.ScreenScale))
+	end)
+end)
+Window.AddTooltip(recalcScaleBtn, "Click this if the script misses the cancel button on quests")
+
+-- == Quests Category ==========================================
 local hasQuestPieces = false
 if farmCfg.QuestPieces[currentSea] and next(farmCfg.QuestPieces[currentSea]) then
 	hasQuestPieces = true
