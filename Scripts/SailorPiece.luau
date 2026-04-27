@@ -763,6 +763,28 @@ local function readQuestStatus()
 	return getQuestStatus(text)
 end
 
+local function WaitForNewCharacter(oldAddress)
+	while farmToggles.farming do
+		local newCharacter = cons.Player.Character
+		
+		if newCharacter then
+			local currentAddress = tostring(newCharacter.Address)
+
+			if currentAddress ~= oldAddress then
+				local root = getRoot(newCharacter)
+				local humanoid = getHumanoid(newCharacter)
+				
+				if root and humanoid and humanoid.Health > 0 then
+					task.wait(0.1)
+					return newCharacter
+				end
+			end
+		end
+		task.wait(0.5)
+	end
+	return nil
+end
+
 -- == Auto Farm Logic ==========================================
 local function getSpawnpointAddress(spawnpoint)
 	if not spawnpoint then return nil end
@@ -820,7 +842,12 @@ local function attackNPC(npc, myToken)
 		local playerHumanoid = getHumanoid(character)
 		local npcHumanoid = getHumanoid(npc)
 
-		if not playerHumanoid or playerHumanoid.Health <= 0 then break end
+		if not playerHumanoid or playerHumanoid.Health <= 0 then 
+			local oldCharAddress = tostring(character.Address)
+			WaitForNewCharacter(oldCharAddress)
+			break 
+		end
+		
 		if not npcHumanoid or npcHumanoid.Health <= 0 then break end
 		if not npcRoot then break end
 
@@ -1148,8 +1175,6 @@ local farmMethodDd = Window.AddDropdown(catFarm, "Farm method", {"Nearest", "Sel
 	task.spawn(function()
 		farmCfg.AutofarmMethod = sel
 		if farmToggles.farming then
-			startAutoFarm(false)
-			task.wait(0.1)
 			startAutoFarm(true)
 		end
 	end)
@@ -1174,8 +1199,6 @@ task.spawn(function()
 	while true do
 		task.wait(1200)
 		if farmToggles.farming then
-			startAutoFarm(false)
-			task.wait(1)
 			startAutoFarm(true)
 		end
 	end
