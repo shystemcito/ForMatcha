@@ -1147,6 +1147,11 @@ Window.AddSection(catFarm, "Farm config")
 local farmMethodDd = Window.AddDropdown(catFarm, "Farm method", {"Nearest", "Selected", "Quest", "LevelUp"}, farmCfg.AutofarmMethod, function(sel)
 	task.spawn(function()
 		farmCfg.AutofarmMethod = sel
+		if farmToggles.farming then
+			startAutoFarm(false)
+			task.wait(0.1)
+			startAutoFarm(true)
+		end
 	end)
 end)
 Window.AddTooltip(farmMethodDd, "Select the auto farm method")
