@@ -203,6 +203,36 @@ local farmCfg = {
 	},
 	bossNames = {},
 	ExcludedBosses = {},
+	NPCsMap = {
+		Sea1 = {
+			Npc1 = {"Thief", Vector3.new(177, 50, -157)},
+			Npc2 = {"ThiefBoss", Vector3.new(-66, 50, -162)},
+			Npc3 = {"DesertBandit", Vector3.new(-793, 50, -433)},
+			Npc4 = {"FrostRogue", Vector3.new(-410, 50, -990)},
+			Npc5 = {"SnowBoss", Vector3.new(-594, 80, -1060)},
+			Npc6 = {"Sorcerer", Vector3.new(1398, 50, 488)},
+			Npc7 = {"PandaMiniBoss", Vector3.new(1688, 60, 513)},
+			Npc8 = {"Hollow", Vector3.new(-365, 50, 1097)},
+			Npc9 = {"Monkey", Vector3.new(-567, 50, 399)},
+			Npc10 = {"MonkeyBoss", Vector3.new(-494, 100, 496)},
+			Npc11 = {"StrongSorcerer", Vector3.new(666, 50, -1695)},
+			Npc12 = {"Curse", Vector3.new(-18, 50, -1845)},
+			Npc13 = {"Slime", Vector3.new(-1124, 60, 371)},
+			Npc14 = {"AcademyTeacher", Vector3.new(1072, 50, 1275)},
+			Npc15 = {"Swordsman", Vector3.new(-1274, 50, -1191)},
+			Npc16 = {"Quincy", Vector3.new(-1339, 1650, 1617)},
+			Npc17 = {"Ninja", Vector3.new(-1876, 60, -738)},
+			Npc18 = {"ArenaFighter", Vector3.new(59, 50, 1816)},
+			Npc19 = {"Bunny", Vector3.new(2306, 60, 2224)},
+		},
+		Sea2 = {
+			Npc1 = {"Delinquent", Vector3.new(-325, 50, -119)},
+			Npc2 = {"StrongFighter", Vector3.new(-194, 70, -450)},
+			Npc3 = {"StrongBandit", Vector3.new(-3075, 60, -667)},
+			Npc4 = {"FastNinja", Vector3.new(-1579, 50, 1846)},
+		},
+	},
+	NPCsNames = {},
 };
 local currentSea = "None"
 for seaName, placeId in cons.Places do
@@ -224,7 +254,6 @@ table.sort(farmCfg.QuestsNames, function(a, b)
 	return numA < numB
 end)
 
-table.clear(farmCfg.bossNames)
 if farmCfg.BossesMap[currentSea] then
 	for _, data in farmCfg.BossesMap[currentSea] do 
 		local cleanName = string.split(data[1], "_")[1]
@@ -234,6 +263,16 @@ if farmCfg.BossesMap[currentSea] then
 		end
 	end
 	table.sort(farmCfg.bossNames)
+end
+
+if farmCfg.NPCsMap[currentSea] then
+	for _, npcData in farmCfg.NPCsMap[currentSea] do
+		local npcName = npcData[1]
+		if not table.find(farmCfg.ExistingNPCs, npcName) then
+			table.insert(farmCfg.ExistingNPCs, npcName)
+		end
+	end
+	table.sort(farmCfg.ExistingNPCs)
 end
 
 local farmToggles = {
@@ -253,6 +292,7 @@ local tokens = {
 	autoEquipToolToggle = 0,
 	autoCancelQuestsToggle = 0,
 	autoFarmToggle = 0,
+	bypassTeleport = false,
 }
 
 -- == Helpers ==========================================
@@ -417,57 +457,33 @@ local function equipTool(toolName)
 end
 
 -- == NPCs Utilities ==========================================
-local function refreshNPCs()
-	table.clear(farmCfg.SelectedNPCs)
-	table.clear(farmCfg.ExistingNPCs)
-
-	local character = cons.Player.Character
-	local root = getRoot(character)
-	local tempNPCs = {}
-
-	for _, npc in cons.NPCPath:GetChildren() do
-		if npc.ClassName == "Model" and getHumanoid(npc) then
-			local npcRoot = getRoot(npc)
-			local npcFormattedName = npc.Name:gsub("%s*%d+$", "")
-			local distance, hasRoot = 9999, false
-
-			if npcRoot and root then
-				hasRoot = true
-				distance = (npcRoot.Position - root.Position).Magnitude
-				table.insert(tempNPCs, {Name = npcFormattedName, Distance = distance, HasRoot = hasRoot})
-			end
-		end
-	end
-
-	table.sort(tempNPCs, function(a, b)
-		if a.HasRoot ~= b.HasRoot then
-			return a.HasRoot
-		elseif a.HasRoot then
-			return a.Distance < b.Distance
-		end
-		return false
-	end)
-
-	for _, data in tempNPCs do
-		if not table.find(farmCfg.ExistingNPCs, data.Name) then
-			table.insert(farmCfg.ExistingNPCs, data.Name)
-		end
-	end
-end
-refreshNPCs()
-
 local function findNearestNPC(filterNames)
 	local character = cons.Player.Character
 	local root = getRoot(character)
 
-	if not root then return nil end
+	if not root then return nil, nil end
 
 	local nearestNPC = nil
 	local bestDist = math.huge
 
+	local function isExcluded(nameToCheck)
+		if not farmCfg.ExcludedBosses or #farmCfg.ExcludedBosses == 0 then return false end
+		
+		local clean = string.split(nameToCheck, "_")[1]
+		local superClean = clean:gsub("%s*%d+$", "")
+		
+		if table.find(farmCfg.ExcludedBosses, clean) then return true end
+		if table.find(farmCfg.ExcludedBosses, superClean) then return true end
+		if table.find(farmCfg.ExcludedBosses, nameToCheck) then return true end
+		
+		return false
+	end
+
+	-- 1. Buscar NPCs cargados y listos (con rootpart)
 	for _, npc in cons.NPCPath:GetChildren() do
 		if npc.ClassName == "Model" and npc:FindFirstChild("HumanoidRootPart") and npc.Name ~= "TrainingDummy" then
-			if table.find(farmCfg.ExcludedBosses, npc.Name) then continue end
+			-- Si es un boss excluido, pa la casa, lo skipeamos
+			if isExcluded(npc.Name) then continue end
 			
 			local humanoid = getHumanoid(npc)
 			if humanoid and humanoid.Health > 0 then
@@ -487,34 +503,56 @@ local function findNearestNPC(filterNames)
 		end
 	end
 
-	if filterNames and nearestNPC == nil then
-		for _, filterName in filterNames do
-			local possibleNames = {filterName}
+	-- Si pilló uno full, devolvemos la instancia y su posición
+	if nearestNPC then 
+		return nearestNPC, getRoot(nearestNPC).Position 
+	end
 
-			for i = 1, 10 do 
-				table.insert(possibleNames, filterName .. " " .. tostring(i))
-				table.insert(possibleNames, filterName .. tostring(i))
-			end
+	-- 2. Fallback: Si no hay cargados, buscar la zona más cercana
+	local bestZoneDist = math.huge
+	local fallbackPos = nil
 
-			for _, exactName in possibleNames do
-				if table.find(farmCfg.ExcludedBosses, exactName) then continue end
-				
-				local directNpc = cons.NPCPath:FindFirstChild(exactName)
-				if directNpc and directNpc.ClassName == "Model" and directNpc:FindFirstChild("HumanoidRootPart") then
-					local humanoid = getHumanoid(directNpc)
-					if humanoid and humanoid.Health > 0 then
-						local npcRoot = getRoot(directNpc)
-						if npcRoot then
-							nearestNPC = directNpc
+	if farmCfg.NPCsMap[currentSea] then
+		for _, npcData in farmCfg.NPCsMap[currentSea] do
+			local npcName = npcData[1]
+			local zonePos = npcData[2]
+			
+			-- Si la zona es de un boss excluido, ni cagando vamos
+			if isExcluded(npcName) then continue end
+			
+			local allowed = (not filterNames or #filterNames == 0) or table.find(filterNames, npcName)
+			if allowed then
+				local distToZone = (zonePos - root.Position).Magnitude
+				if distToZone < bestZoneDist then
+					local exists = false
+					
+					local possibleNames = {npcName}
+					for i = 1, 10 do 
+						table.insert(possibleNames, npcName .. " " .. tostring(i))
+						table.insert(possibleNames, npcName .. tostring(i))
+					end
+					
+					for _, exactName in possibleNames do
+						-- Doble check porsiaca el nombre con numero es un boss excluido
+						if isExcluded(exactName) then continue end
+						
+						local foundChild = cons.NPCPath:FindFirstChild(exactName)
+						if foundChild and foundChild.ClassName == "Model" then
+							exists = true
 							break
 						end
 					end
+					
+					if exists then
+						bestZoneDist = distToZone
+						fallbackPos = zonePos
+					end
 				end
 			end
-			if nearestNPC then break end
 		end
 	end
-	return nearestNPC
+
+	return nil, fallbackPos
 end
 
 local function findNearestBoss(filterNamesExclusion)
@@ -614,62 +652,75 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 
 	local startPos = root.Position
 	local distance = (targetPos - startPos).Magnitude
-	local duration = distance / farmCfg.TweenSpeed
 
-	local steps = math.max(1, math.floor(duration / 0.03))
-	local stepTime = duration / steps
-
-	for i = 1, steps do
-		if tokens.tweenToken ~= myToken then return end
-
-		character = cons.Player.Character
-		root = getRoot(character)
-		humanoid = getHumanoid(character)
-		
-		if not isManual and not farmToggles.farming then
-			if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
-			if tokens.tweenToken == myToken then farmToggles.isTweening = false end
-			return
+	if farmToggles.bypassTeleport and distance > 500 then
+		task.wait(0.25)
+		for i = 1,100 do
+			if tokens.tweenToken ~= myToken then return end
+			game.Players.LocalPlayer.Character.HumanoidRootPart.Position = targetPos
+			task.wait(0.01)
+			keypress(keyMap.Q)
+			keyrelease(keyMap.Q)
 		end
+	else
+		-- Tween normal
+		local duration = distance / farmCfg.TweenSpeed
+		local steps = math.max(1, math.floor(duration / 0.03))
+		local stepTime = duration / steps
 
-		if not character or not root or not humanoid or humanoid.Health <= 0 then 
-			if tokens.tweenToken == myToken then farmToggles.isTweening = false end
-			return
-		end
-		
-		if targetInstance then
-			local targetHum = getHumanoid(targetInstance)
-			if not targetInstance.Parent or not targetHum or targetHum.Health <= 0 then
+		for i = 1, steps do
+			if tokens.tweenToken ~= myToken then return end
+
+			character = cons.Player.Character
+			root = getRoot(character)
+			humanoid = getHumanoid(character)
+			
+			if not isManual and not farmToggles.farming then
 				if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
 				if tokens.tweenToken == myToken then farmToggles.isTweening = false end
-				return 
+				return
 			end
+
+			if not character or not root or not humanoid or humanoid.Health <= 0 then 
+				if tokens.tweenToken == myToken then farmToggles.isTweening = false end
+				return
+			end
+			
+			if targetInstance then
+				local targetHum = getHumanoid(targetInstance)
+				if not targetInstance.Parent or not targetHum or targetHum.Health <= 0 then
+					if root then root.AssemblyLinearVelocity = Vector3.new(0, 0, 0) end
+					if tokens.tweenToken == myToken then farmToggles.isTweening = false end
+					return 
+				end
+			end
+
+			local alpha = i / steps
+			local newPos = startPos:Lerp(targetPos, alpha)
+			root.Position = newPos
+
+			if farmCfg.SafeTween then
+				local direction = (targetPos - root.Position)
+				if direction.Magnitude > 0.1 then
+					local lookCF = CFrame.lookAt(
+						root.Position,
+						root.Position + Vector3.new(direction.X, 0, direction.Z)
+					)
+					root.CFrame = lookCF
+				end
+
+				local currentDist = (targetPos - root.Position).Magnitude
+				if currentDist > 30 then
+					keypress(keyMap.Q)
+					keyrelease(keyMap.Q)
+				end
+			end
+
+			task.wait(stepTime)
 		end
-
-		local alpha = i / steps
-		local newPos = startPos:Lerp(targetPos, alpha)
-		root.Position = newPos
-
-		if farmCfg.SafeTween then
-			local direction = (targetPos - root.Position)
-			if direction.Magnitude > 0.1 then
-				local lookCF = CFrame.lookAt(
-					root.Position,
-					root.Position + Vector3.new(direction.X, 0, direction.Z)
-				)
-				root.CFrame = lookCF
-			end
-
-			local currentDist = (targetPos - root.Position).Magnitude
-			if currentDist > 30 then
-				keypress(keyMap.Q)
-				keyrelease(keyMap.Q)
-			end
-		end
-
-		task.wait(stepTime)
 	end
 
+	-- Snap final (te tpea al mob despues del bypass o del tween)
 	if tokens.tweenToken == myToken then
 		character = cons.Player.Character
 		root = getRoot(character)
@@ -880,6 +931,8 @@ local function attackNPC(npc, myToken)
 end
 
 local function runFarmNearest(filtered, myToken)
+	local selectedIndex = 1 -- Index para controlar la rotación de la lista
+
 	while farmToggles.farming do
 		if tokens.autoFarmToggle ~= myToken then break end
 		
@@ -890,23 +943,50 @@ local function runFarmNearest(filtered, myToken)
 			targetNPC, targetPos = findNearestBoss(farmCfg.ExcludedBosses)
 		end
 		
-		if not targetNPC then
-			local filter = (filtered and #farmCfg.SelectedNPCs > 0) and farmCfg.SelectedNPCs or nil
-			targetNPC = findNearestNPC(filter)
-			
-			if targetNPC then
-				local npcRoot = getRoot(targetNPC)
-				if npcRoot then
-					targetPos = npcRoot.Position
+		if not targetNPC and not targetPos then
+			if filtered and #farmCfg.SelectedNPCs > 0 then
+				-- MODO SELECTED: Rotación por zonas
+				if selectedIndex > #farmCfg.SelectedNPCs then
+					selectedIndex = 1
 				end
+				
+				local currentTargetName = farmCfg.SelectedNPCs[selectedIndex]
+				local fNpc, fPos = findNearestNPC({currentTargetName})
+				
+				targetNPC = fNpc
+				targetPos = fPos
+				
+				-- Si no hay NPCs vivos de este tipo, PERO tenemos la fallback pos de su zona...
+				if not targetNPC and targetPos then
+					local character = cons.Player.Character
+					local root = getRoot(character)
+					if root then
+						-- Calculamos la distancia plana (ignorando Y) a la zona
+						local distToZone = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
+						
+						-- Si ya llegamos a la zona (< 100 studs) y el área está limpia, pasamos al siguiente
+						if distToZone < 100 then 
+							selectedIndex = selectedIndex + 1 
+							task.wait(0.1)
+							continue
+						end
+					end
+				end
+			else
+				-- MODO NEAREST NORMAL: El más cercano de todo el mapa sin importar la clase
+				local fNpc, fPos = findNearestNPC(nil)
+				targetNPC = fNpc
+				targetPos = fPos
 			end
 		end
 
-		if not targetNPC or not targetPos then
+		-- Si no hay bicho ni zona, f
+		if not targetPos then
 			task.wait(1)
 			continue
 		end
 
+		-- Viajamos al bicho/zona
 		TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetNPC)
 		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
@@ -918,7 +998,11 @@ local function runFarmNearest(filtered, myToken)
 		end
 		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
-		attackNPC(targetNPC, myToken)
+		-- A farmear
+		if targetNPC then
+			attackNPC(targetNPC, myToken)
+		end
+		
 		task.wait(0.1)
 	end
 end
@@ -992,33 +1076,41 @@ local function runFarmQuest(autoLevel, myToken)
 			forceGoToNPC = false 
 		end
 
-		local npc = findNearestNPC({enemyName})
-		if not npc then
+		local npc, fallbackPos = findNearestNPC({enemyName})
+		local finalPos = nil
+
+		if npc then
+			local npcRoot = getRoot(npc)
+			if npcRoot then finalPos = npcRoot.Position end
+		elseif fallbackPos then
+			finalPos = fallbackPos
+		end
+
+		if not finalPos then
 			task.wait(1)
 			continue
 		end
 
-		local npcRoot = getRoot(npc)
-		if npcRoot then
-			TweenTo(npcRoot.Position + Vector3.new(0, 50, 0), true, npc)
-		end
+		TweenTo(finalPos + Vector3.new(0, 50, 0), true, npc)
 		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
 		local progressBeforeKill = currentProgress or 0
 
-		attackNPC(npc, myToken)
+		if npc then
+			attackNPC(npc, myToken)
 
-		local npcHumanoid = getHumanoid(npc)
-		if npcHumanoid and npcHumanoid.Health <= 0 then
-			task.wait(0.3) 
+			local npcHumanoid = getHumanoid(npc)
+			if npcHumanoid and npcHumanoid.Health <= 0 then
+				task.wait(0.3) 
 
-			local newProgress, newMax = readQuestStatus()
+				local newProgress, newMax = readQuestStatus()
 
-			if newProgress == progressBeforeKill then
-				forceGoToNPC = true
-			else
-				forceGoToNPC = false
-				currentProgress = newProgress
+				if newProgress == progressBeforeKill then
+					forceGoToNPC = true
+				else
+					forceGoToNPC = false
+					currentProgress = newProgress
+				end
 			end
 		end
 
@@ -1062,23 +1154,31 @@ local Window = UiLib.CreateWindow({
 })
 
 -- == Categories ==========================================
-local catSetup = Window.AddCategory("Farm Setup")
-local catFarm = Window.AddCategory("Auto Farm")
-local catQuests = Window.AddCategory("Quests")
+local catToolSetup = Window.AddCategory("Tool setup")
+local catMovement  = Window.AddCategory("Movement")
+local catAutoFarm  = Window.AddCategory("Auto Farm")
+local catQuests    = Window.AddCategory("Quests")
+local catMisc      = Window.AddCategory("Misc")
 
--- == Setup Category ==========================================
--- == Tools section ==========================================
-Window.AddSection(catSetup, "Tools")
-local toolsDd = Window.AddDropdown(catSetup, "Tool select", farmCfg.Tools, "None", function(sel)
+-- == Tool setup Category =================================
+Window.AddSection(catToolSetup, "Tools & Weapons")
+local toolsDd = Window.AddDropdown(catToolSetup, "Tool select", farmCfg.Tools, "None", function(sel)
 	task.spawn(function()
 		farmCfg.SelectedTool = sel
 	end)
 end)
-Window.AddTooltip(toolsDd, "Select a tool for autofarming")
+Window.AddTooltip(toolsDd, "Choose the weapon or tool you want the autofarm to use.")
 
+local toolUpdtateBtn = Window.AddButton(catToolSetup, "Refresh tools", function()
+	refreshTools()
+	farmCfg.SelectedTool = "None"
+	toolsDd:SetOptions(farmCfg.Tools, "None")
+	UiLib.Notify("Tool update", "List of tools updated", 2)
+end)
+Window.AddTooltip(toolUpdtateBtn, "Click to refresh your inventory if a new tool isn't showing up.")
 
-local attackLabel = Window.AddValueLabel(catSetup, "Selected attacks", "None")
-local attacksDd = Window.AddDropdown(catSetup, "Select attacks", {"Z", "X", "C", "V", "F"}, "None", function(sel)
+local attackLabel = Window.AddValueLabel(catToolSetup, "Selected attacks", "None")
+local attacksDd = Window.AddDropdown(catToolSetup, "Select attacks", {"Z", "X", "C", "V", "F"}, "None", function(sel)
 	task.spawn(function()
 		local index = table.find(farmCfg.SelectedAttacks, sel)
 		if index then
@@ -1089,122 +1189,9 @@ local attacksDd = Window.AddDropdown(catSetup, "Select attacks", {"Z", "X", "C",
 		attackLabel:SetValue(table.concat(farmCfg.SelectedAttacks, ", "))
 	end)
 end)
-Window.AddTooltip(attacksDd, "Select auto-attacks for the autofarm")
+Window.AddTooltip(attacksDd, "Pick which skills or hotkeys to spam while attacking.")
 
-local toolUpdtateBtn = Window.AddButton(catSetup, "Refresh tools", function()
-	refreshTools()
-	farmCfg.SelectedTool = "None"
-	toolsDd:SetOptions(farmCfg.Tools, "None")
-	UiLib.Notify("Tool update", "List of tools updated", 2)
-end)
-Window.AddTooltip(toolUpdtateBtn, "Update the list of tools")
-
--- == NPCs Section ==========================================
-Window.AddSection(catSetup, "NPCs")
-local NPCsLabel = Window.AddValueLabel(catSetup, "Selected NPCs", "None")
-local NPCsDd = Window.AddDropdown(catSetup, "Select NPCs", farmCfg.ExistingNPCs, "None", function(sel)
-	task.spawn(function()
-		local index = table.find(farmCfg.SelectedNPCs, sel)
-		if index then
-			table.remove(farmCfg.SelectedNPCs, index)
-		else
-			table.insert(farmCfg.SelectedNPCs, sel)
-		end
-		NPCsLabel:SetValue(table.concat(farmCfg.SelectedNPCs, ", "))
-	end)
-end)
-Window.AddTooltip(NPCsDd, "Select NPCs for autofarm")
-
-local NPCsUpdateBtn = Window.AddButton(catSetup, "Refresh NPCs", function()
-	refreshNPCs()
-	NPCsDd:SetOptions(farmCfg.ExistingNPCs, "None")
-	NPCsLabel:SetValue(table.concat(farmCfg.SelectedNPCs, ", "))
-end)
-Window.AddTooltip(NPCsUpdateBtn, "Update the list of NPCs")
-
-local safeTweenTgl = Window.AddToggle(catSetup, "Safe tween", farmCfg.SafeTween, function(state)
-	farmCfg.SafeTween = state
-end)
-Window.AddTooltip(safeTweenTgl, "This Tween will use dash movement")
-
-Window.AddSlider(catSetup, "Tween Speed", 16, 200, farmCfg.TweenSpeed, function(val)
-	farmCfg.TweenSpeed = math.floor(val)
-end)
-
-local attackPosDd = Window.AddDropdown(catSetup, "Attack Position", {"Upward", "Bottom", "Backward", "Front"}, farmCfg.AttackPosition, function(sel)
-	task.spawn(function()
-		farmCfg.AttackPosition = sel
-	end)
-end)
-Window.AddTooltip(attackPosDd, "Select attack position | Note: If using Bottom, enable Noclip in the Matcha menu")
-
-Window.AddSlider(catSetup, "NPC Distance", 1, 20, farmCfg.NPCDistance, function(val)
-	farmCfg.NPCDistance = math.floor(val)
-end)
--- == Misc section ==================================
-Window.AddSection(catSetup, "Misc")
-local antiAfkTgl = Window.AddToggle(catSetup, "Anti-AFK", farmToggles.AntiAfk, function(state)
-	farmToggles.AntiAfk = state
-	
-	if state then
-		tokens.antiAfkToggle += 1
-		local myToken = tokens.antiAfkToggle
-		
-		task.spawn(function()
-			while farmToggles.AntiAfk do
-				task.wait(600)
-				if tokens.antiAfkToggle ~= myToken or not farmToggles.AntiAfk then break end
-				
-				if not isrbxactive() then continue end
-				mousemoverel(-10, 0)
-				task.wait(0.1)
-				mousemoverel(10, 0)
-			end
-		end)
-	else
-		tokens.antiAfkToggle += 1
-	end
-end)
-Window.AddTooltip(antiAfkTgl, "This will avoid getting you disconnected after 20 minutes (ROBLOX WINDOWS MUST BE ACTIVE)")
-
--- == Farm Category ==========================================
--- == FarmConfig Section ==========================================
-Window.AddSection(catFarm, "Farm config")
-
-local farmMethodDd = Window.AddDropdown(catFarm, "Farm method", {"Nearest", "Selected", "Quest", "LevelUp"}, farmCfg.AutofarmMethod, function(sel)
-	task.spawn(function()
-		farmCfg.AutofarmMethod = sel
-		if farmToggles.farming then
-			startAutoFarm(true)
-		end
-	end)
-end)
-Window.AddTooltip(farmMethodDd, "Select the auto farm method")
-
-local selectQuestDd = Window.AddDropdown(catFarm, "Quest (for Quest method)", farmCfg.QuestsNames, "None", function(sel)
-	task.spawn(function()
-		farmCfg.SelectedQuest = sel
-		--TweenTo(farmCfg.QuestMap[currentSea][sel][2], true)
-	end)
-end)
-
--- == Auto Farm Section ==========================================
-Window.AddSection(catFarm, "Auto Farming")
-Window.AddToggle(catFarm, "Auto Farm", farmToggles.farming, function(state)
-	task.spawn(function()
-		startAutoFarm(state)
-	end)
-end)
-task.spawn(function()
-	while true do
-		task.wait(1200)
-		if farmToggles.farming then
-			startAutoFarm(true)
-		end
-	end
-end)
-
-Window.AddToggle(catFarm, "Attack", farmToggles.attacking, function(state)
+local attackTgl = Window.AddToggle(catToolSetup, "Attack", farmToggles.attacking, function(state)
 	farmToggles.attacking = state
 	if state then
 		tokens.attackToggle += 1
@@ -1222,8 +1209,9 @@ Window.AddToggle(catFarm, "Attack", farmToggles.attacking, function(state)
 		tokens.attackToggle += 1
 	end
 end)
+Window.AddTooltip(attackTgl, "Enable to start auto-clicking and using selected skills.")
 
-local AutoEquipTgl = Window.AddToggle(catFarm, "Auto equip tools", farmToggles.equipTools, function(state)
+local AutoEquipTgl = Window.AddToggle(catToolSetup, "Auto equip tools", farmToggles.equipTools, function(state)
 	farmToggles.equipTools = state
 	if state then
 		tokens.autoEquipToolToggle += 1
@@ -1245,19 +1233,72 @@ local AutoEquipTgl = Window.AddToggle(catFarm, "Auto equip tools", farmToggles.e
 		tokens.autoEquipToolToggle += 1
 	end
 end)
-Window.AddTooltip(AutoEquipTgl, "Auto-Equip choosen tool in Farm Setup")
+Window.AddTooltip(AutoEquipTgl, "Automatically re-equips your chosen tool if you drop it or die.")
 
+-- == Movement Category ===================================
+Window.AddSection(catMovement, "Positioning & Tweening")
+local safeTweenTgl = Window.AddToggle(catMovement, "Safe tween", farmCfg.SafeTween, function(state)
+	farmCfg.SafeTween = state
+end)
+Window.AddTooltip(safeTweenTgl, "Uses dash logic while flying to targets to avoid anti-cheat kicks.")
 
--- == Bosses Section ==========================================
-Window.AddSection(catFarm, "Bosses")
+local tweenSpeedSld = Window.AddSlider(catMovement, "Tween Speed", 16, 200, farmCfg.TweenSpeed, function(val)
+	farmCfg.TweenSpeed = math.floor(val)
+end)
+Window.AddTooltip(tweenSpeedSld, "Set how fast your character flies towards enemies.")
 
-local PrioBossCbx = Window.AddCheckbox(catFarm, "Prioritize bosses", farmToggles.bossPrioritize, function(state)
+local npcDistSld = Window.AddSlider(catMovement, "NPC Distance", 1, 20, farmCfg.NPCDistance, function(val)
+	farmCfg.NPCDistance = math.floor(val)
+end)
+Window.AddTooltip(npcDistSld, "Set how far away you want to stand from the enemy while fighting.")
+
+Window.AddSection(catMovement, "Teleport")
+local bypassTpTgl = Window.AddToggle(catMovement, "Bypass Teleport", farmToggles.bypassTeleport, function(state)
+	farmToggles.bypassTeleport = state
+end)
+Window.AddTooltip(bypassTpTgl, "Instantly teleports to targets further than 500 studs (Risky!).")
+
+-- == Auto Farm Category ==================================
+Window.AddSection(catAutoFarm, "Farm config")
+local farmMethodDd = Window.AddDropdown(catAutoFarm, "Farm method", {"Nearest", "Selected", "Quest", "LevelUp"}, farmCfg.AutofarmMethod, function(sel)
+	task.spawn(function()
+		farmCfg.AutofarmMethod = sel
+		if farmToggles.farming then
+			startAutoFarm(true)
+		end
+	end)
+end)
+Window.AddTooltip(farmMethodDd, "Choose how you want to farm: nearest enemy, specific NPCs, or by quests.")
+
+local selectQuestDd = Window.AddDropdown(catAutoFarm, "Quest (for Quest method)", farmCfg.QuestsNames, "None", function(sel)
+	task.spawn(function()
+		farmCfg.SelectedQuest = sel
+	end)
+end)
+Window.AddTooltip(selectQuestDd, "Pick the exact quest you want to loop when using 'Quest' method.")
+
+Window.AddSection(catAutoFarm, "Target Settings")
+local NPCsLabel = Window.AddValueLabel(catAutoFarm, "Selected NPCs", "None")
+local NPCsDd = Window.AddDropdown(catAutoFarm, "Select NPCs", farmCfg.ExistingNPCs, "None", function(sel)
+	task.spawn(function()
+		local index = table.find(farmCfg.SelectedNPCs, sel)
+		if index then
+			table.remove(farmCfg.SelectedNPCs, index)
+		else
+			table.insert(farmCfg.SelectedNPCs, sel)
+		end
+		NPCsLabel:SetValue(table.concat(farmCfg.SelectedNPCs, ", "))
+	end)
+end)
+Window.AddTooltip(NPCsDd, "Choose specific enemies to hunt when using the 'Selected' farm method.")
+
+local PrioBossCbx = Window.AddCheckbox(catAutoFarm, "Prioritize bosses", farmToggles.bossPrioritize, function(state)
 	farmToggles.bossPrioritize = state
 end)
-Window.AddTooltip(PrioBossCbx, "Check if there are bosses to kill")
+Window.AddTooltip(PrioBossCbx, "Forces the bot to drop everything and target a boss if one spawns.")
 
-local excludedBossesLabel = Window.AddValueLabel(catFarm, "Excluded Bosses", "None")
-local excludeBossDd = Window.AddDropdown(catFarm, "Exclude / Include Boss", farmCfg.bossNames, "None", function(sel)
+local excludedBossesLabel = Window.AddValueLabel(catAutoFarm, "Excluded Bosses", "None")
+local excludeBossDd = Window.AddDropdown(catAutoFarm, "Exclude / Include Boss", farmCfg.bossNames, "None", function(sel)
 	task.spawn(function()
 		if sel == "None" then return end 
 		local index = table.find(farmCfg.ExcludedBosses, sel)
@@ -1274,54 +1315,40 @@ local excludeBossDd = Window.AddDropdown(catFarm, "Exclude / Include Boss", farm
 		end
 	end)
 end)
-Window.AddTooltip(excludeBossDd, "Select bosses you want to ignore")
+Window.AddTooltip(excludeBossDd, "Pick bosses you want the autofarm to completely ignore.")
 
--- == Extras Section ==========================================
-Window.AddSection(catFarm, "Extras")
-local useSpawnpointsTgl = Window.AddToggle(catFarm, "Use spawnpoints", farmToggles.UseSpawnpoints, function(state)
+local attackPosDd = Window.AddDropdown(catAutoFarm, "Attack Position", {"Upward", "Bottom", "Backward", "Front"}, farmCfg.AttackPosition, function(sel)
+	task.spawn(function()
+		farmCfg.AttackPosition = sel
+	end)
+end)
+Window.AddTooltip(attackPosDd, "Where to stand while attacking. Note: Turn on Noclip in Matcha if using 'Bottom'.")
+
+Window.AddSection(catAutoFarm, "Main Toggles")
+local autoFarmTgl = Window.AddToggle(catAutoFarm, "Auto Farm", farmToggles.farming, function(state)
+	task.spawn(function()
+		startAutoFarm(state)
+	end)
+end)
+Window.AddTooltip(autoFarmTgl, "Turn this on to start the main autofarm loop.")
+
+task.spawn(function()
+	while true do
+		task.wait(1200)
+		if farmToggles.farming then
+			startAutoFarm(true)
+		end
+	end
+end)
+
+local useSpawnpointsTgl = Window.AddToggle(catAutoFarm, "Use spawnpoints", farmToggles.UseSpawnpoints, function(state)
 	task.spawn(function()
 		farmToggles.UseSpawnpoints = state
 	end)
 end)
-Window.AddTooltip(useSpawnpointsTgl, "Use map spawnpoints while autofarming")
+Window.AddTooltip(useSpawnpointsTgl, "Automatically claims the nearest crystal spawnpoint while farming.")
 
-local autoCancelQuestTgl = Window.AddToggle(catFarm, "Auto cancel quest", farmToggles.AutoCancelQuests, function(state)
-	farmToggles.AutoCancelQuests = state
-	if state then
-		tokens.autoCancelQuestsToggle += 1
-		local myToken = tokens.autoCancelQuestsToggle
-		
-		task.spawn(function()
-			while farmToggles.AutoCancelQuests do
-				task.wait(900)
-				if tokens.autoCancelQuestsToggle ~= myToken or not farmToggles.AutoCancelQuests then break end
-				pcall(function()
-					local CloseButton = cons.Player.PlayerGui.QuestUI.Quest.Quest.Holder.Content.Exit.CloseButton
-					ClickGui(CloseButton)
-				end)
-			end
-		end)
-	else
-		tokens.autoCancelQuestsToggle += 1
-	end
-end)
-Window.AddTooltip(autoCancelQuestTgl, "Auto cancel current quest every 15 minutes.")
-
-local scaleLabel = Window.AddValueLabel(catFarm, "Scale Info", "Screen scale: " .. tostring(farmCfg.ScreenScale))
-local recalcScaleBtn = Window.AddButton(catFarm, "Re-Calculate Scale (Fix AutoCancel)", function()
-	task.spawn(function()
-		for i = 3, 1, -1 do
-			scaleLabel:SetValue("Calculating in " .. i .. "s, don't move your mouse...")
-			task.wait(1)
-		end
-		scaleLabel:SetValue("Calculating...")
-		farmCfg.ScreenScale = getScreenScale()
-		scaleLabel:SetValue("Screen scale: " .. tostring(farmCfg.ScreenScale))
-	end)
-end)
-Window.AddTooltip(recalcScaleBtn, "Click this if the script misses the cancel button on quests")
-
--- == Quests Category ==========================================
+-- == Quests Category =====================================
 local hasQuestPieces = false
 if farmCfg.QuestPieces[currentSea] and next(farmCfg.QuestPieces[currentSea]) then
 	hasQuestPieces = true
@@ -1347,17 +1374,81 @@ if hasQuestPieces then
 		
 		table.insert(pieceNames, 1, "None")
 		
-		Window.AddDropdown(catQuests, "Go to " .. groupName, pieceNames, "None", function(sel)
+		local pieceDd = Window.AddDropdown(catQuests, "Go to " .. groupName, pieceNames, "None", function(sel)
 			task.spawn(function()
 				if sel ~= "None" and pieceDataMap[sel] then
 					TweenTo(pieceDataMap[sel], true, nil, true) 
 				end
 			end)
 		end)
+		Window.AddTooltip(pieceDd, "Instantly fly to this specific hidden piece or location.")
 	end
 else
 	Window.AddSection(catQuests, "No quest pieces available in this sea")
 end
+
+-- == Misc Category =======================================
+Window.AddSection(catMisc, "Utility")
+local antiAfkTgl = Window.AddToggle(catMisc, "Anti-AFK", farmToggles.AntiAfk, function(state)
+	farmToggles.AntiAfk = state
+	
+	if state then
+		tokens.antiAfkToggle += 1
+		local myToken = tokens.antiAfkToggle
+		
+		task.spawn(function()
+			while farmToggles.AntiAfk do
+				task.wait(600)
+				if tokens.antiAfkToggle ~= myToken or not farmToggles.AntiAfk then break end
+				
+				if not isrbxactive() then continue end
+				mousemoverel(-10, 0)
+				task.wait(0.1)
+				mousemoverel(10, 0)
+			end
+		end)
+	else
+		tokens.antiAfkToggle += 1
+	end
+end)
+Window.AddTooltip(antiAfkTgl, "Prevents Roblox from kicking you for idling. Keep the game window open!")
+
+local autoCancelQuestTgl = Window.AddToggle(catMisc, "Auto cancel quest", farmToggles.AutoCancelQuests, function(state)
+	farmToggles.AutoCancelQuests = state
+	if state then
+		tokens.autoCancelQuestsToggle += 1
+		local myToken = tokens.autoCancelQuestsToggle
+		
+		task.spawn(function()
+			while farmToggles.AutoCancelQuests do
+				task.wait(900)
+				if tokens.autoCancelQuestsToggle ~= myToken or not farmToggles.AutoCancelQuests then break end
+				qqq(function()
+					local CloseButton = cons.Player.PlayerGui.QuestUI.Quest.Quest.Holder.Content.Exit.CloseButton
+					ClickGui(CloseButton)
+				end)
+			end
+		end)
+	else
+		tokens.autoCancelQuestsToggle += 1
+	end
+end)
+Window.AddTooltip(autoCancelQuestTgl, "Cancels a bugged quest every 15 mins to keep the farm running smoothly.")
+
+Window.AddSection(catMisc, "UI Data")
+local scaleLabel = Window.AddValueLabel(catMisc, "Scale Info", "Screen scale: " .. tostring(farmCfg.ScreenScale))
+local recalcScaleBtn = Window.AddButton(catMisc, "Re-Calculate Scale (Fix AutoCancel)", function()
+	task.spawn(function()
+		for i = 3, 1, -1 do
+			scaleLabel:SetValue("Calculating in " .. i .. "s, don't move your mouse...")
+			task.wait(1)
+		end
+		scaleLabel:SetValue("Calculating...")
+		farmCfg.ScreenScale = getScreenScale()
+		scaleLabel:SetValue("Screen scale: " .. tostring(farmCfg.ScreenScale))
+	end)
+end)
+Window.AddTooltip(recalcScaleBtn, "Fixes mouse clicking issues for UI buttons. Do NOT touch your mouse while calculating!")
 
 Window.AddConfigPreset({})
 UiLib.Run()
