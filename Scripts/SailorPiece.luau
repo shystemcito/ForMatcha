@@ -165,6 +165,10 @@ local farmCfg = {
 				Piece7 = {"Boss Spot 7", Vector3.new(-1365, 18, 40)},
 				Piece8 = {"Boss Spot 8", Vector3.new(-1382, 26, -1093)},
 			},
+			DemoniteFragments = {
+				Piece1 = {"Demonite Fragment #1", Vector3.new(1006, 12, 1130)},
+				Piece2 = {"Demonite Fragment #2", Vector3.new(920, 70, 1478)},
+			},
 		},
 		Sea2 = {},
 	},
@@ -195,9 +199,12 @@ local farmCfg = {
 			Boss19 = {"GreatMageBoss_Normal", Vector3.new(2481, 50, 2053)},
 			Boss20 = {"StrongestofTodayBoss_Normal", Vector3.new(136, 50, -2431)},
 			Boss21 = {"StrongestinHistoryBoss_Normal", Vector3.new(611, 50, -2315)},
+			Boss22 = {"TrueAizenBoss_Normal", Vector3.new(-1199, 1650, 1775)},
+			Boss23 = {"AnosBoss_Normal", Vector3.new(950, 50, 1378)}
 		},
 		Sea2 = {
 			Boss1 = {"CosmicBeingBoss_Normal", Vector3.new(-1825, 50, 1943)}, -- Idk more bosses in sea 2,
+			Boss2 = {"TheWorldBoss_Normal", Vector3.new(-3354, 9, -955)},
 			-- Reminder: Add spawn bosses later
 		},
 	},
@@ -277,6 +284,7 @@ end
 
 local farmToggles = {
 	attacking = false,
+	autoClicking = false,
 	farming = false,
 	equipTools = false,
 	bossPrioritize = false,
@@ -289,6 +297,7 @@ local tokens = {
 	tweenToken = 0,
 	antiAfkToggle = 0,
 	attackToggle = 0,
+	autoClickToggle = 0,
 	autoEquipToolToggle = 0,
 	autoCancelQuestsToggle = 0,
 	autoFarmToggle = 0,
@@ -479,10 +488,8 @@ local function findNearestNPC(filterNames)
 		return false
 	end
 
-	-- 1. Buscar NPCs cargados y listos (con rootpart)
 	for _, npc in cons.NPCPath:GetChildren() do
 		if npc.ClassName == "Model" and npc:FindFirstChild("HumanoidRootPart") and npc.Name ~= "TrainingDummy" then
-			-- Si es un boss excluido, pa la casa, lo skipeamos
 			if isExcluded(npc.Name) then continue end
 			
 			local humanoid = getHumanoid(npc)
@@ -503,12 +510,10 @@ local function findNearestNPC(filterNames)
 		end
 	end
 
-	-- Si pilló uno full, devolvemos la instancia y su posición
 	if nearestNPC then 
 		return nearestNPC, getRoot(nearestNPC).Position 
 	end
 
-	-- 2. Fallback: Si no hay cargados, buscar la zona más cercana
 	local bestZoneDist = math.huge
 	local fallbackPos = nil
 
@@ -517,7 +522,6 @@ local function findNearestNPC(filterNames)
 			local npcName = npcData[1]
 			local zonePos = npcData[2]
 			
-			-- Si la zona es de un boss excluido, ni cagando vamos
 			if isExcluded(npcName) then continue end
 			
 			local allowed = (not filterNames or #filterNames == 0) or table.find(filterNames, npcName)
@@ -533,7 +537,6 @@ local function findNearestNPC(filterNames)
 					end
 					
 					for _, exactName in possibleNames do
-						-- Doble check porsiaca el nombre con numero es un boss excluido
 						if isExcluded(exactName) then continue end
 						
 						local foundChild = cons.NPCPath:FindFirstChild(exactName)
@@ -663,7 +666,6 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 			keyrelease(keyMap.Q)
 		end
 	else
-		-- Tween normal
 		local duration = distance / farmCfg.TweenSpeed
 		local steps = math.max(1, math.floor(duration / 0.03))
 		local stepTime = duration / steps
@@ -720,7 +722,6 @@ local function TweenTo(targetPos, lift, targetInstance, isManual)
 		end
 	end
 
-	-- Snap final (te tpea al mob despues del bypass o del tween)
 	if tokens.tweenToken == myToken then
 		character = cons.Player.Character
 		root = getRoot(character)
@@ -764,7 +765,6 @@ end
 
 local function attack()
 	if isrbxactive() then
-		mouse1click()
 		for _, attackKey in farmCfg.SelectedAttacks do
 			local keyCode = keyMap[attackKey]
 			if keyCode then
@@ -931,7 +931,7 @@ local function attackNPC(npc, myToken)
 end
 
 local function runFarmNearest(filtered, myToken)
-	local selectedIndex = 1 -- Index para controlar la rotación de la lista
+	local selectedIndex = 1
 
 	while farmToggles.farming do
 		if tokens.autoFarmToggle ~= myToken then break end
@@ -945,7 +945,6 @@ local function runFarmNearest(filtered, myToken)
 		
 		if not targetNPC and not targetPos then
 			if filtered and #farmCfg.SelectedNPCs > 0 then
-				-- MODO SELECTED: Rotación por zonas
 				if selectedIndex > #farmCfg.SelectedNPCs then
 					selectedIndex = 1
 				end
@@ -956,15 +955,12 @@ local function runFarmNearest(filtered, myToken)
 				targetNPC = fNpc
 				targetPos = fPos
 				
-				-- Si no hay NPCs vivos de este tipo, PERO tenemos la fallback pos de su zona...
 				if not targetNPC and targetPos then
 					local character = cons.Player.Character
 					local root = getRoot(character)
 					if root then
-						-- Calculamos la distancia plana (ignorando Y) a la zona
 						local distToZone = (Vector3.new(root.Position.X, 0, root.Position.Z) - Vector3.new(targetPos.X, 0, targetPos.Z)).Magnitude
 						
-						-- Si ya llegamos a la zona (< 100 studs) y el área está limpia, pasamos al siguiente
 						if distToZone < 100 then 
 							selectedIndex = selectedIndex + 1 
 							task.wait(0.1)
@@ -973,20 +969,17 @@ local function runFarmNearest(filtered, myToken)
 					end
 				end
 			else
-				-- MODO NEAREST NORMAL: El más cercano de todo el mapa sin importar la clase
 				local fNpc, fPos = findNearestNPC(nil)
 				targetNPC = fNpc
 				targetPos = fPos
 			end
 		end
 
-		-- Si no hay bicho ni zona, f
 		if not targetPos then
 			task.wait(1)
 			continue
 		end
 
-		-- Viajamos al bicho/zona
 		TweenTo(targetPos + Vector3.new(0, 50, 0), true, targetNPC)
 		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
@@ -998,7 +991,6 @@ local function runFarmNearest(filtered, myToken)
 		end
 		if tokens.autoFarmToggle ~= myToken or not farmToggles.farming then break end
 
-		-- A farmear
 		if targetNPC then
 			attackNPC(targetNPC, myToken)
 		end
@@ -1178,7 +1170,7 @@ end)
 Window.AddTooltip(toolUpdtateBtn, "Click to refresh your inventory if a new tool isn't showing up.")
 
 local attackLabel = Window.AddValueLabel(catToolSetup, "Selected attacks", "None")
-local attacksDd = Window.AddDropdown(catToolSetup, "Select attacks", {"Z", "X", "C", "V", "F"}, "None", function(sel)
+local attacksDd = Window.AddDropdown(catToolSetup, "Select attacks", {"Z", "X", "C", "V", "F", "J"}, "None", function(sel)
 	task.spawn(function()
 		local index = table.find(farmCfg.SelectedAttacks, sel)
 		if index then
@@ -1191,7 +1183,7 @@ local attacksDd = Window.AddDropdown(catToolSetup, "Select attacks", {"Z", "X", 
 end)
 Window.AddTooltip(attacksDd, "Pick which skills or hotkeys to spam while attacking.")
 
-local attackTgl = Window.AddToggle(catToolSetup, "Attack", farmToggles.attacking, function(state)
+local attackTgl = Window.AddToggle(catToolSetup, "Auto Attack", farmToggles.attacking, function(state)
 	farmToggles.attacking = state
 	if state then
 		tokens.attackToggle += 1
@@ -1209,7 +1201,27 @@ local attackTgl = Window.AddToggle(catToolSetup, "Attack", farmToggles.attacking
 		tokens.attackToggle += 1
 	end
 end)
-Window.AddTooltip(attackTgl, "Enable to start auto-clicking and using selected skills.")
+Window.AddTooltip(attackTgl, "Enable to start using selected skills.")
+
+local autoClickTgl = Window.AddToggle(catToolSetup, "Auto Click", farmToggles.autoClicking, function(state)
+	farmToggles.autoClicking = state
+	if state then
+		tokens.autoClickToggle += 1
+		local myToken = tokens.autoClickToggle
+		task.spawn(function()
+			while farmToggles.autoClicking do
+				if tokens.autoClickToggle ~= myToken or not farmToggles.autoClicking then break end
+				if isrbxactive() and not farmToggles.isTweening then
+					mouse1click()
+				end
+				task.wait(0.1)
+			end
+		end)
+	else
+		tokens.autoClickToggle += 1
+	end
+end)
+Window.AddTooltip(autoClickTgl, "Enable to start auto-clicking with your mouse.")
 
 local AutoEquipTgl = Window.AddToggle(catToolSetup, "Auto equip tools", farmToggles.equipTools, function(state)
 	farmToggles.equipTools = state
