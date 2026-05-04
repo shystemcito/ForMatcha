@@ -3,7 +3,7 @@
 -- Designed for Matcha external executor overlay rendering
 -- No tweens, no heavy animations. Pure Drawing API.
 
-print("MatchaUI 1.2.0 - shystemmm")
+print("Testing to-do 3-1.0.0")
 local MatchaUI = {}
 MatchaUI.__index = MatchaUI
 
@@ -368,6 +368,10 @@ function MatchaUI.CreateWindow(opts)
     -- ─────────────────────────────
     local function setWinVisible(state)
         win.Visible = state
+        -- Showing the window always presents it fully expanded (all _draws visible).
+        -- Reset Minimized so the internal state matches what the user sees.
+        -- The toggle thread will call win.Minimize() afterward if needed.
+        if state then win.Minimized = false end
         for _, d in ipairs(win._draws) do
             pcall(function() d.Visible = state end)
         end
@@ -510,7 +514,7 @@ function MatchaUI.CreateWindow(opts)
                 end
             end
         end
-        minTxt.Text = win.Minimized and "+" or "-"
+        minTxt.Text = win.Minimized and "-" or "-"
     end
 
     -- ─────────────────────────────
@@ -726,6 +730,20 @@ function MatchaUI.CreateWindow(opts)
             _knob=knob, _track=track, _knobSz=knobSz,
             State=state, Callback=callback,
         }
+        -- SetState(bool, fireCallback?)
+        -- Programmatically set the toggle on or off.
+        -- Pass fireCallback=true to invoke the Callback with the new state.
+        function elem:SetState(newState, fireCallback)
+            self.State = newState
+            self._track.Color = newState and Theme.AccentOn or Theme.AccentOff
+            self._knob.Position = Vector2.new(
+                newState and (self._tx + self._trackW - self._knobSz - 2) or (self._tx + 2),
+                self._ty + 2
+            )
+            if fireCallback and self.Callback then
+                pcall(self.Callback, newState)
+            end
+        end
         registerElemDesc(cat, elem)
         return elem
     end
@@ -774,6 +792,21 @@ function MatchaUI.CreateWindow(opts)
             Min=min, Max=max, Value=val,
             Dragging=false, Callback=callback,
         }
+        -- SetValue(number, fireCallback?)
+        -- Programmatically move the slider to a clamped value.
+        -- Pass fireCallback=true to invoke the Callback with the new value.
+        function elem:SetValue(newVal, fireCallback)
+            newVal = math.max(self.Min, math.min(self.Max, newVal))
+            self.Value = newVal
+            local pct   = (newVal - self.Min) / math.max(self.Max - self.Min, 0.001)
+            local relX  = math.floor(self._trackW * pct)
+            self._fillRect.Size     = Vector2.new(math.max(1, relX), 4)
+            self._knob.Position     = Vector2.new(self._trackX + relX - self._knobW / 2, self._trackY - 5)
+            self._valLbl.Text       = tostring(math.floor(newVal))
+            if fireCallback and self.Callback then
+                pcall(self.Callback, newVal)
+            end
+        end
         registerElemDesc(cat, elem)
         return elem
     end
@@ -923,11 +956,30 @@ function MatchaUI.CreateWindow(opts)
             self._selTxt.Text  = sel
         end
 
+        -- SetSelected(value, fireCallback?)
+        -- Programmatically select an option by value string.
+        -- Closes the dropdown if open. Pass fireCallback=true to invoke Callback.
+        function elem:SetSelected(value, fireCallback)
+            -- Close if open
+            if self._isOpen then
+                self._isOpen = false
+                self._arrow.Text = "v"
+                for _, item in ipairs(self._itemObjs) do
+                    item._bg.Visible  = false
+                    item._txt.Visible = false
+                end
+                MatchaUI.Choosing = false
+            end
+            self.Selected      = value
+            self._selTxt.Text  = value
+            if fireCallback and self.Callback then
+                pcall(self.Callback, value)
+            end
+        end
+
         registerElemDesc(cat, elem)
         return elem
     end
-
-    -- ── TEXT INPUT
     local function addTextInput(cat, labelText, placeholder, callback)
         local cx  = contentX()
         local cw  = contentW()
@@ -956,6 +1008,24 @@ function MatchaUI.CreateWindow(opts)
             _placeholder=placeholder or "",
             Text=text, Focused=focused, Callback=callback,
         }
+        -- SetText(string, fireCallback?)
+        -- Programmatically set the input text.
+        -- Pass fireCallback=true to invoke Callback with the new text.
+        function elem:SetText(newText, fireCallback)
+            self.Text = newText or ""
+            local display = self.Text == "" and self._placeholder or self.Text
+            self._inputTxt.Text  = display
+            self._inputTxt.Color = self.Text == "" and Theme.TextDisabled or Theme.TextPrimary
+            if self._cursor then
+                local inputLeft  = self._x + 4
+                local inputRight = self._x + self._w - 6
+                local cursorX = math.min(inputLeft + (#self.Text * 7), inputRight)
+                self._cursor.Position = Vector2.new(cursorX, self._cursor.Position.Y)
+            end
+            if fireCallback and self.Callback then
+                pcall(self.Callback, self.Text)
+            end
+        end
         registerElemDesc(cat, elem)
         return elem
     end
@@ -993,6 +1063,16 @@ function MatchaUI.CreateWindow(opts)
             _check=check, _box=box,
             State=state, Callback=callback,
         }
+        -- SetState(bool, fireCallback?)
+        -- Programmatically check or uncheck the checkbox.
+        -- Pass fireCallback=true to invoke the Callback with the new state.
+        function elem:SetState(newState, fireCallback)
+            self.State = newState
+            self._check.Visible = newState
+            if fireCallback and self.Callback then
+                pcall(self.Callback, newState)
+            end
+        end
         registerElemDesc(cat, elem)
         return elem
     end
@@ -1021,6 +1101,19 @@ function MatchaUI.CreateWindow(opts)
             _kbTxt=kbTxt, Key=key, Listening=false,
             Callback=callback,
         }
+        -- SetKey(vkCode, fireCallback?)
+        -- Programmatically change the bound key. Stops listening if active.
+        -- Pass fireCallback=true to invoke Callback(vkCode, keyName).
+        function elem:SetKey(newKey, fireCallback)
+            self.Key      = newKey
+            self.Listening = false
+            local name = KeyNames[newKey] or ("VK"..tostring(newKey))
+            self._kbTxt.Text  = "[ "..name.." ]"
+            self._kbTxt.Color = Theme.TextPrimary
+            if fireCallback and self.Callback then
+                pcall(self.Callback, newKey, name)
+            end
+        end
         registerElemDesc(cat, elem)
         return elem
     end
@@ -2375,20 +2468,37 @@ function MatchaUI.AddConfigPreset(win, opts)
     -- When the caller does not pass toggleKeybind, the Config-category keybind
     -- widget (kbWidget) IS the toggle.  A background thread polls it and
     -- shows/hides the window — identical to what ExampleUsage does externally.
+    --
+    -- Bug fix: when the window was minimized before being hidden, toggling it
+    -- visible must restore the minimized state instead of fully expanding it.
+    -- We track _wasMinimized so SetVisible(true) followed by a re-minimize
+    -- restores the correct visual state.
     if not opts.toggleKeybind then
         spawn(function()
-            local lastDown = false
+            local lastDown    = false
+            local _wasMinimized = false  -- remembers minimized state while hidden
             while true do
                 wait(0.05)
                 if isrbxactive() and kbWidget then
                     local down = iskeypressed(kbWidget.Key)
                     if down and not lastDown then
-                        win.SetVisible(not win.Visible)
-                        MatchaUI.Notify(
-                            win.Visible and "UI Shown" or "UI Hidden",
-                            "Bound to VK " .. tostring(kbWidget.Key),
-                            2
-                        )
+                        if win.Visible then
+                            -- About to hide: remember current minimized state
+                            _wasMinimized = win.Minimized
+                            win.SetVisible(false)
+                            MatchaUI.Notify("UI Hidden",
+                                "Bound to VK " .. tostring(kbWidget.Key), 2)
+                        else
+                            -- About to show: restore fully first, then re-minimize if needed
+                            win.SetVisible(true)
+                            if _wasMinimized then
+                                -- win.SetVisible(true) always expands the window;
+                                -- call minimize() to put it back to minimized state.
+                                win.Minimize()
+                            end
+                            MatchaUI.Notify("UI Shown",
+                                "Bound to VK " .. tostring(kbWidget.Key), 2)
+                        end
                     end
                     lastDown = down
                 end
