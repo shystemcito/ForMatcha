@@ -32,7 +32,6 @@ local TabService       = Loader.load("TabService")
 | Loader | Utility to load ForMatcha libraries from GitHub |
 | TweenService | Position animation with easing styles for BasePart instances |
 | CharacterService | Character lifecycle management (spawn, respawn, death) |
-| TabService | Robust tab lifecycle management for Matcha's UI system | (Dont use this)
 | MatchaUI | UI Library for matcha |
 
 ## Per-library usage
